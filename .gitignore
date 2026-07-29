@@ -1,0 +1,6 @@
+node_modules
+.pnpm-store
+.next
+out
+.env*
+사진선별/
