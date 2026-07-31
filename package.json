@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build",
-    "start": "vinext start",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "build:sites": "vinext build",
+    "start:sites": "vinext start",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -429,12 +429,12 @@ function UploadStage(props: {
       </div>
 
       <section className="soft-card children-card setup-card">
-        <Title num="1" title="아이 얼굴과 이름 설정" note="얼굴이 잘 보이는 정면 사진 권장" />
+        <Title num="1" title="아이 얼굴과 이름 설정" note="한 아이만 나온 선명한 정면 얼굴 사진을 업로드해 주세요" />
         <div className="child-form">
           <input value={props.childName} onChange={(event) => props.setChildName(event.target.value)} placeholder="아이 이름" />
           <label className="child-file">
             <input type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
-            {props.childPhoto ? props.childPhoto.name : "대표 얼굴 사진 선택"}
+            {props.childPhoto ? props.childPhoto.name : "선명한 정면 얼굴 사진 선택"}
           </label>
           <button disabled={props.isRegisteringChild} onClick={() => void props.addChild()}>
             {props.isRegisteringChild ? "얼굴 확인 중…" : "아이 추가"}
@@ -451,7 +451,7 @@ function UploadStage(props: {
               </div>
             ))}
           </div>
-        ) : <p className="helper setup-helper">정면에 가깝고 한 아이만 선명하게 나온 사진을 등록하면, 표정·옷·머리·자세가 달라져도 얼굴 특징을 기준으로 찾아요.</p>}
+        ) : <p className="helper setup-helper">얼굴 전체가 밝고 선명하게 보이는 정면 사진을 올려 주세요. 모자·마스크·손으로 얼굴을 가린 사진이나 여러 명이 함께 나온 사진은 피하는 것이 좋아요.</p>}
       </section>
 
       <section className="soft-card upload-card">
