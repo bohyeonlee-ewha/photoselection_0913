@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Stage = "upload" | "analyzing" | "workspace";
-type View = "individualBest" | "children" | "groupBest" | "groups" | "export";
+type View = "individualBest" | "children" | "activities" | "groupBest" | "groups" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체" | "미술" | "감각·과학" | "수·조작" | "음률" | "기타" | "미분류";
@@ -22,6 +22,7 @@ const activities: Activity[] = ["신체", "미술", "감각·과학", "수·조�
 const viewLabels: Record<View, string> = {
   individualBest: "개인사진 베스트 추천",
   children: "아이별 정리",
+  activities: "활동별 사진 정리",
   groupBest: "단체사진 베스트 추천",
   groups: "놀이별 단체 정리",
   export: "결과 내보내기",
@@ -322,7 +323,7 @@ export default function Home() {
       {stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
           <button className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 설정·업로드</button>
-          <button className={stage === "workspace" && ["individualBest", "children"].includes(view) ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individualBest")}>2 개인사진</button>
+          <button className={stage === "workspace" && ["individualBest", "children", "activities"].includes(view) ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individualBest")}>2 개인사진</button>
           <button className={stage === "workspace" && ["groupBest", "groups"].includes(view) ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("groupBest")}>3 단체사진</button>
           <button className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
         </nav>
@@ -360,11 +361,12 @@ export default function Home() {
 
       {stage === "workspace" && (
         <section className="workspace-page">
-          <p className="eyebrow">{["individualBest", "children"].includes(view) ? "2 개인사진" : ["groupBest", "groups"].includes(view) ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
-          {["individualBest", "children"].includes(view) && (
+          <p className="eyebrow">{["individualBest", "children", "activities"].includes(view) ? "2 개인사진" : ["groupBest", "groups"].includes(view) ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
+          {["individualBest", "children", "activities"].includes(view) && (
             <nav className="section-tabs" aria-label="개인사진 보기">
               <button className={view === "individualBest" ? "active" : ""} onClick={() => setView("individualBest")}>2-1 베스트 추천</button>
               <button className={view === "children" ? "active" : ""} onClick={() => setView("children")}>2-2 아이별 정리</button>
+              <button className={view === "activities" ? "active" : ""} onClick={() => setView("activities")}>2-3 활동별 사진 정리</button>
             </nav>
           )}
           {["groupBest", "groups"].includes(view) && (
@@ -397,8 +399,18 @@ export default function Home() {
               children={children}
               shotTypes={shotTypes}
               names={names}
-              matchedChildren={matchedChildren}
               activityByPhoto={activityByPhoto}
+              setActivityByPhoto={setActivityByPhoto}
+              selected={selected}
+              toggleSelected={toggleSelected}
+            />
+          )}
+          {view === "activities" && (
+            <ActivityOrganization
+              photos={goodPhotos}
+              shotTypes={shotTypes}
+              activityByPhoto={activityByPhoto}
+              setActivityByPhoto={setActivityByPhoto}
               selected={selected}
               toggleSelected={toggleSelected}
             />
@@ -700,8 +712,8 @@ function ByChild(props: {
   children: Child[];
   shotTypes: Record<number, ShotType>;
   names: Record<number, number>;
-  matchedChildren: Record<number, number[]>;
   activityByPhoto: Record<number, Activity>;
+  setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
   selected: number[];
   toggleSelected: (id: number) => void;
 }) {
@@ -711,24 +723,61 @@ function ByChild(props: {
       <p className="page-lede">아이 아래에 놀이영역별 사진 수와 실제 사진을 표시해요. 사진을 눌러 결과 포함 여부도 바꿀 수 있어요.</p>
       <div className="child-detail-list">
         {props.children.map((child) => {
-          const childPhotos = props.photos.filter((photo) => props.shotTypes[photo.id] === "individual"
-            ? props.names[photo.id] === child.id
-            : props.matchedChildren[photo.id]?.includes(child.id));
+          const childPhotos = props.photos.filter((photo) => props.shotTypes[photo.id] === "individual" && props.names[photo.id] === child.id);
           const picked = childPhotos.filter((photo) => props.selected.includes(photo.id)).length;
-          const groupCount = childPhotos.filter((photo) => props.shotTypes[photo.id] === "group").length;
+          const activityGroups = activities
+            .map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) }))
+            .filter((group) => group.photos.length > 0);
           return (
             <section className="soft-card child-detail-card" key={child.id}>
               <div className="child-heading large">
                 <img src={child.url} alt={`${child.name} 대표 얼굴`} />
-                <div><strong>{child.name}</strong><small>선택 {picked}장 · 인식 {childPhotos.length}장 · 단체 {groupCount}장 포함</small></div>
+                <div><strong>{child.name}</strong><small>선택 {picked}장 · 개인사진 {childPhotos.length}장</small></div>
               </div>
               <ActivitySummary photos={childPhotos} activityByPhoto={props.activityByPhoto} />
-              <SelectablePhotoGrid photos={childPhotos} selected={props.selected} toggleSelected={props.toggleSelected} activityByPhoto={props.activityByPhoto} />
+              <div className="child-activity-sections">
+                {activityGroups.map((group) => (
+                  <section key={group.activity}>
+                    <div className="activity-section-title"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div>
+                    <ActivityPhotoGrid photos={group.photos} selected={props.selected} toggleSelected={props.toggleSelected} activityByPhoto={props.activityByPhoto} setActivityByPhoto={props.setActivityByPhoto} />
+                  </section>
+                ))}
+                {!activityGroups.length && <p className="helper">분류된 개인사진이 아직 없어요.</p>}
+              </div>
             </section>
           );
         })}
       </div>
       {!props.children.length && <div className="empty-state">아이 설정에서 이름과 대표 얼굴을 먼저 추가해 주세요.</div>}
+    </>
+  );
+}
+
+function ActivityOrganization(props: {
+  photos: Photo[];
+  shotTypes: Record<number, ShotType>;
+  activityByPhoto: Record<number, Activity>;
+  setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
+  selected: number[];
+  toggleSelected: (id: number) => void;
+}) {
+  const individualPhotos = props.photos.filter((photo) => props.shotTypes[photo.id] === "individual");
+  const groups = activities
+    .map((activity) => ({ activity, photos: individualPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) }))
+    .filter((group) => group.photos.length > 0);
+  return (
+    <>
+      <h1>아이 이름과 관계없이<br /><em>활동별로 모아봐요.</em></h1>
+      <p className="page-lede">모든 개인사진을 아이 이름 대신 선택한 활동만 기준으로 분류해요. 활동을 바꾸면 사진이 해당 구역으로 바로 이동해요.</p>
+      <div className="activity-organize-list">
+        {groups.map((group) => (
+          <section className="soft-card activity-organize-card" key={group.activity}>
+            <div className="activity-section-title large"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div>
+            <ActivityPhotoGrid photos={group.photos} selected={props.selected} toggleSelected={props.toggleSelected} activityByPhoto={props.activityByPhoto} setActivityByPhoto={props.setActivityByPhoto} />
+          </section>
+        ))}
+      </div>
+      {!individualPhotos.length && <div className="empty-state">분류된 개인사진이 아직 없어요.</div>}
     </>
   );
 }
@@ -946,6 +995,37 @@ function SelectablePhotoGrid({ photos, selected, toggleSelected, activityByPhoto
           </button>
         );
       }) : <p>해당 사진이 아직 없어요.</p>}
+    </div>
+  );
+}
+
+function ActivityPhotoGrid(props: {
+  photos: Photo[];
+  selected: number[];
+  toggleSelected: (id: number) => void;
+  activityByPhoto: Record<number, Activity>;
+  setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
+}) {
+  return (
+    <div className="activity-photo-grid">
+      {props.photos.map((photo) => {
+        const picked = props.selected.includes(photo.id);
+        return (
+          <article className={picked ? "is-selected" : ""} key={photo.id}>
+            <button className="activity-photo-button" onClick={() => props.toggleSelected(photo.id)} aria-pressed={picked}>
+              <img src={photo.url} alt={photo.name} />
+              <span>{picked ? "✓ 선택됨" : "선택하기"}</span>
+            </button>
+            <select
+              aria-label={`${photo.name} 활동 선택`}
+              value={props.activityByPhoto[photo.id] ?? "미분류"}
+              onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}
+            >
+              {activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}
+            </select>
+          </article>
+        );
+      })}
     </div>
   );
 }
