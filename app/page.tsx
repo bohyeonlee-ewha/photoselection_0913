@@ -3,12 +3,13 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Stage = "upload" | "analyzing" | "workspace";
-type View = "best" | "children" | "groups" | "export";
+type View = "individualBest" | "children" | "groupBest" | "groups" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체" | "미술" | "감각·과학" | "수·조작" | "음률" | "기타" | "미분류";
 type Photo = { id: number; name: string; url: string };
 type Child = { id: number; name: string; url: string; descriptor: number[] };
+type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
 type ImageAnalysis = {
   quality: Quality;
   reasons: string[];
@@ -19,15 +20,16 @@ type ImageAnalysis = {
 
 const activities: Activity[] = ["신체", "미술", "감각·과학", "수·조작", "음률", "기타", "미분류"];
 const viewLabels: Record<View, string> = {
-  best: "베스트 추천",
-  children: "개인·아이별 정리",
-  groups: "단체 정리",
+  individualBest: "개인사진 베스트 추천",
+  children: "아이별 정리",
+  groupBest: "단체사진 베스트 추천",
+  groups: "놀이별 단체 정리",
   export: "결과 내보내기",
 };
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("upload");
-  const [view, setView] = useState<View>("best");
+  const [view, setView] = useState<View>("individualBest");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
   const [childName, setChildName] = useState("");
@@ -105,29 +107,43 @@ export default function Home() {
     ));
   };
 
-  const pickPhotos = (event: ChangeEvent<HTMLInputElement>) => {
+  const pickPhotos = (event: ChangeEvent<HTMLInputElement>, mode: "replace" | "append") => {
     const files = Array.from(event.target.files ?? []);
-    if (files.length > 100) {
-      setMessage("사진은 한 번에 최대 100장까지 선택할 수 있어요.");
+    const total = mode === "append" ? photos.length + files.length : files.length;
+    if (total > 100) {
+      setMessage(`사진은 최대 100장까지 올릴 수 있어요. 현재 ${photos.length}장이 선택되어 있어요.`);
+      event.target.value = "";
       return;
     }
     if (files.some((file) => !["image/jpeg", "image/png"].includes(file.type))) {
       setMessage("JPG 또는 PNG 사진만 선택할 수 있어요.");
+      event.target.value = "";
       return;
     }
-    photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-    const next = files.map((file, index) => ({ id: index + 1, name: file.name, url: URL.createObjectURL(file) }));
-    setPhotos(next);
-    setQualities(Object.fromEntries(next.map((photo) => [photo.id, "good"])));
-    setShotTypes(Object.fromEntries(next.map((photo) => [photo.id, "individual"])));
-    setActivityByPhoto(Object.fromEntries(next.map((photo) => [photo.id, guessActivity(photo.name)])));
-    setQualityReasons({});
-    setQualityScores({});
-    setNames({});
-    setMatchedChildren({});
-    setSelected(next.map((photo) => photo.id));
-    setBestByGroup({});
-    setMessage(`${next.length}장의 사진을 불러왔어요. 분석을 시작해 주세요.`);
+    if (!files.length) return;
+    if (mode === "replace") photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    const firstId = mode === "append" ? Math.max(0, ...photos.map((photo) => photo.id)) + 1 : 1;
+    const next = files.map((file, index) => ({ id: firstId + index, name: file.name, url: URL.createObjectURL(file) }));
+    const defaults = Object.fromEntries(next.map((photo) => [photo.id, "good" as Quality]));
+    const defaultTypes = Object.fromEntries(next.map((photo) => [photo.id, "individual" as ShotType]));
+    const defaultActivities = Object.fromEntries(next.map((photo) => [photo.id, guessActivity(photo.name)]));
+    setPhotos((current) => mode === "append" ? [...current, ...next] : next);
+    setQualities((current) => mode === "append" ? { ...current, ...defaults } : defaults);
+    setShotTypes((current) => mode === "append" ? { ...current, ...defaultTypes } : defaultTypes);
+    setActivityByPhoto((current) => mode === "append" ? { ...current, ...defaultActivities } : defaultActivities);
+    if (mode === "replace") {
+      setQualityReasons({});
+      setQualityScores({});
+      setNames({});
+      setMatchedChildren({});
+      setBestByGroup({});
+    }
+    setSelected((current) => mode === "append" ? [...current, ...next.map((photo) => photo.id)] : next.map((photo) => photo.id));
+    setRecognitionMessage("");
+    setMessage(mode === "append"
+      ? `${next.length}장을 추가했어요. 총 ${total}장을 다시 분석해 주세요.`
+      : `${next.length}장의 사진을 불러왔어요. 분석을 시작해 주세요.`);
+    event.target.value = "";
   };
 
   const analyzeAll = async () => {
@@ -191,7 +207,7 @@ export default function Home() {
     setAnalysisMessage("분류 제안을 준비했어요.");
     window.setTimeout(() => {
       setStage("workspace");
-      setView("best");
+      setView("individualBest");
     }, 350);
   };
 
@@ -233,7 +249,7 @@ export default function Home() {
     setBestByGroup({});
     setRecognitionMessage("");
     setStage("upload");
-    setView("best");
+    setView("individualBest");
     setMessage("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
   };
 
@@ -260,10 +276,19 @@ export default function Home() {
     downloadText(`\uFEFF${[header, ...rows].join("\n")}`, "사진-분류-결과.tsv");
   };
 
-  const downloadPhotoArchive = async () => {
+  const downloadPhotoArchive = async (scope: ExportScope) => {
     const header = "선택\t품질\t사진구분\t아이\t인식된 아이\t놀이영역\t베스트\t파일명";
+    const scopedPhotos = selectedGoodPhotos.filter((photo) => {
+      if (scope.type === "child") return shotTypes[photo.id] === "individual" && names[photo.id] === scope.childId;
+      if (scope.type === "group") return shotTypes[photo.id] === "group";
+      return true;
+    });
+    const scopedChild = scope.type === "child" ? children.find((child) => child.id === scope.childId) : null;
+    const archiveName = scope.type === "child"
+      ? `${safeFilename(scopedChild?.name ?? "아이")}-개인사진.zip`
+      : scope.type === "group" ? "단체사진.zip" : "사진-분류-결과.zip";
     const rows: string[] = [];
-    const entries = await Promise.all(selectedGoodPhotos.map(async (photo, index) => {
+    const entries = await Promise.all(scopedPhotos.map(async (photo, index) => {
       const type = shotTypes[photo.id] ?? "individual";
       const child = children.find((item) => item.id === names[photo.id]);
       const owner = type === "group" ? "단체" : child?.name ?? "아이 미분류";
@@ -284,7 +309,7 @@ export default function Home() {
       name: "사진-분류-결과.tsv",
       data: new TextEncoder().encode(`\uFEFF${[header, ...rows].join("\n")}`),
     });
-    downloadBlob(createStoredZip(entries), "사진-분류-결과.zip");
+    downloadBlob(createStoredZip(entries), archiveName);
   };
 
   return (
@@ -297,16 +322,9 @@ export default function Home() {
       {stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
           <button className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 설정·업로드</button>
-          {(Object.keys(viewLabels) as View[]).map((item, index) => (
-            <button
-              className={stage === "workspace" && view === item ? "active" : ""}
-              disabled={!photos.length}
-              key={item}
-              onClick={() => openWorkspaceView(item)}
-            >
-              {index + 2} {viewLabels[item]}
-            </button>
-          ))}
+          <button className={stage === "workspace" && ["individualBest", "children"].includes(view) ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individualBest")}>2 개인사진</button>
+          <button className={stage === "workspace" && ["groupBest", "groups"].includes(view) ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("groupBest")}>3 단체사진</button>
+          <button className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
         </nav>
       )}
 
@@ -342,10 +360,23 @@ export default function Home() {
 
       {stage === "workspace" && (
         <section className="workspace-page">
-          <p className="eyebrow">단계 {Object.keys(viewLabels).indexOf(view) + 2} · {viewLabels[view]}</p>
+          <p className="eyebrow">{["individualBest", "children"].includes(view) ? "2 개인사진" : ["groupBest", "groups"].includes(view) ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
+          {["individualBest", "children"].includes(view) && (
+            <nav className="section-tabs" aria-label="개인사진 보기">
+              <button className={view === "individualBest" ? "active" : ""} onClick={() => setView("individualBest")}>2-1 베스트 추천</button>
+              <button className={view === "children" ? "active" : ""} onClick={() => setView("children")}>2-2 아이별 정리</button>
+            </nav>
+          )}
+          {["groupBest", "groups"].includes(view) && (
+            <nav className="section-tabs" aria-label="단체사진 보기">
+              <button className={view === "groupBest" ? "active" : ""} onClick={() => setView("groupBest")}>3-1 베스트 추천</button>
+              <button className={view === "groups" ? "active" : ""} onClick={() => setView("groups")}>3-2 놀이별 정리</button>
+            </nav>
+          )}
           {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
-          {view === "best" && (
+          {(view === "individualBest" || view === "groupBest") && (
             <BestRecommendations
+              mode={view === "individualBest" ? "individual" : "group"}
               groups={groupedCandidates}
               children={children}
               shotTypes={shotTypes}
@@ -417,7 +448,7 @@ function UploadStage(props: {
   setChildPhoto: (value: File | null) => void;
   addChild: () => Promise<void>;
   removeChild: (id: number) => void;
-  pickPhotos: (event: ChangeEvent<HTMLInputElement>) => void;
+  pickPhotos: (event: ChangeEvent<HTMLInputElement>, mode: "replace" | "append") => void;
   analyzeAll: () => Promise<void>;
 }) {
   return (
@@ -457,12 +488,20 @@ function UploadStage(props: {
       <section className="soft-card upload-card">
         <Title num="2" title="사진 업로드" note="JPG · PNG / 최대 100장" />
         <label className="drop-zone">
-          <input type="file" accept="image/jpeg,image/png" multiple onChange={props.pickPhotos} />
+          <input type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "replace")} />
           <span className="upload-icon">↑</span>
-          <strong>사진을 끌어 놓거나 선택해 주세요</strong>
-          <small>새 사진을 선택하면 현재 업로드 사진을 교체해요.</small>
+          <strong>사진 업로드하기</strong>
+          <small>{props.photos.length ? "새 사진 묶음으로 현재 목록을 교체해요." : "사진을 끌어 놓거나 선택해 주세요."}</small>
         </label>
-        {props.photos.length > 0 && <PhotoStrip photos={props.photos} />}
+        {props.photos.length > 0 && (
+          <>
+            <label className="append-upload">
+              <input type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "append")} />
+              <span>＋</span><strong>추가 사진 업로드하기</strong><small>기존 {props.photos.length}장은 유지돼요.</small>
+            </label>
+            <PhotoStrip photos={props.photos} />
+          </>
+        )}
       </section>
 
       <div className="flow-footer">
@@ -581,6 +620,7 @@ function Classification(props: {
 }
 
 function BestRecommendations(props: {
+  mode: "individual" | "group";
   groups: Record<string, Photo[]>;
   children: Child[];
   shotTypes: Record<number, ShotType>;
@@ -646,11 +686,11 @@ function BestRecommendations(props: {
   );
   return (
     <>
-      <h1>개인과 단체를 나눠<br /><em>베스트 사진을 골라요.</em></h1>
-      <p className="page-lede">품질 점수가 높은 사진을 먼저 추천해요. 개인·단체, 아이 이름, 놀이영역을 직접 고치고 결과 포함 여부도 선택할 수 있어요.</p>
-      {renderSection("개인 사진 베스트", "아이와 놀이영역별로 가장 좋은 사진을 추천해요.", individualEntries)}
-      {renderSection("단체 사진 베스트", "놀이영역별 단체 사진 가운데 가장 좋은 장면을 추천해요.", groupEntries)}
-      {!entries.length && <div className="empty-state">분류된 잘 나온 사진이 아직 없어요.</div>}
+      <h1>{props.mode === "individual" ? <>아이별 좋은 장면을<br /><em>빠르게 골라요.</em></> : <>단체 사진만 모아<br /><em>베스트를 골라요.</em></>}</h1>
+      <p className="page-lede">{props.mode === "individual" ? "아이와 놀이영역별로 품질 점수가 높은 개인사진을 먼저 추천해요." : "아이 수와 관계없이 단체사진만 따로 모아 놀이영역별 베스트를 확인해요."}</p>
+      {props.mode === "individual"
+        ? renderSection("개인 사진 베스트", "아이와 놀이영역별로 가장 좋은 사진을 추천해요.", individualEntries)
+        : renderSection("단체 사진 베스트", "놀이영역별 단체 사진 가운데 가장 좋은 장면을 추천해요.", groupEntries)}
     </>
   );
 }
@@ -802,17 +842,18 @@ function ExportResults(props: {
   groups: Record<string, Photo[]>;
   bestByGroup: Record<string, number>;
   downloadList: () => void;
-  downloadPhotoArchive: () => Promise<void>;
+  downloadPhotoArchive: (scope: ExportScope) => Promise<void>;
 }) {
   const chosen = props.photos.filter((photo) => props.selected.includes(photo.id));
   const sections = groupForExport(chosen, props.shotTypes, props.names, props.activityByPhoto, props.children);
-  const [isSaving, setIsSaving] = useState(false);
-  const savePhotos = async () => {
-    setIsSaving(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const groupCount = chosen.filter((photo) => props.shotTypes[photo.id] === "group").length;
+  const savePhotos = async (scope: ExportScope, key: string) => {
+    setSavingKey(key);
     try {
-      await props.downloadPhotoArchive();
+      await props.downloadPhotoArchive(scope);
     } finally {
-      setIsSaving(false);
+      setSavingKey(null);
     }
   };
   return (
@@ -823,10 +864,31 @@ function ExportResults(props: {
         <div><strong>최종 선택 {chosen.length}장</strong><span>잘 나온 사진 중 결과 포함 사진</span></div>
         <div className="export-actions">
           <button className="secondary" onClick={props.downloadList}>분류표만 저장</button>
-          <button className="primary" disabled={!chosen.length || isSaving} onClick={() => void savePhotos()}>{isSaving ? "사진을 묶는 중…" : "실제 사진 모두 저장"}</button>
+          <button className="primary" disabled={!chosen.length || savingKey !== null} onClick={() => void savePhotos({ type: "all" }, "all")}>{savingKey === "all" ? "사진을 묶는 중…" : "전체 사진 저장"}</button>
         </div>
       </div>
-      <p className="export-note">선택한 원본 사진을 개인/아이/놀이영역과 단체/놀이영역 폴더로 나눈 ZIP 파일에 분류표와 함께 저장해요.</p>
+      <p className="export-note">전체 ZIP 외에도 아이별 개인사진과 단체사진을 각각 별도 ZIP으로 저장할 수 있어요.</p>
+      <section className="scope-export-panel">
+        <div className="scope-export-heading"><strong>나누어 저장하기</strong><span>결과에 포함한 사진 기준</span></div>
+        <div className="scope-export-grid">
+          {props.children.map((child) => {
+            const count = chosen.filter((photo) => props.shotTypes[photo.id] === "individual" && props.names[photo.id] === child.id).length;
+            const key = `child-${child.id}`;
+            return (
+              <article key={child.id}>
+                <img src={child.url} alt={`${child.name} 대표 얼굴`} />
+                <div><strong>{child.name}</strong><span>개인사진 {count}장</span></div>
+                <button disabled={!count || savingKey !== null} onClick={() => void savePhotos({ type: "child", childId: child.id }, key)}>{savingKey === key ? "저장 중…" : "아이별 저장"}</button>
+              </article>
+            );
+          })}
+          <article className="group-scope-card">
+            <div className="group-scope-icon">단체</div>
+            <div><strong>단체사진</strong><span>선택 {groupCount}장</span></div>
+            <button disabled={!groupCount || savingKey !== null} onClick={() => void savePhotos({ type: "group" }, "group")}>{savingKey === "group" ? "저장 중…" : "단체별 저장"}</button>
+          </article>
+        </div>
+      </section>
       <div className="export-sections">
         {Object.entries(sections).map(([section, photos]) => (
           <section className="export-child-group" key={section}>
