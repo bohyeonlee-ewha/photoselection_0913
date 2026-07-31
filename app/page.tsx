@@ -8,12 +8,12 @@ type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체" | "미술" | "감각·과학" | "수·조작" | "음률" | "기타" | "미분류";
 type Photo = { id: number; name: string; url: string };
-type Child = { id: number; name: string; url: string };
+type Child = { id: number; name: string; url: string; descriptor: number[] };
 type ImageAnalysis = {
   quality: Quality;
   reasons: string[];
   shotType: ShotType;
-  signature: number[] | null;
+  descriptors: number[][];
   score: number;
 };
 
@@ -37,12 +37,15 @@ export default function Home() {
   const [qualityScores, setQualityScores] = useState<Record<number, number>>({});
   const [shotTypes, setShotTypes] = useState<Record<number, ShotType>>({});
   const [names, setNames] = useState<Record<number, number>>({});
+  const [matchedChildren, setMatchedChildren] = useState<Record<number, number[]>>({});
   const [activityByPhoto, setActivityByPhoto] = useState<Record<number, Activity>>({});
   const [selected, setSelected] = useState<number[]>([]);
   const [goals, setGoals] = useState<Record<number, number>>({});
   const [bestByGroup, setBestByGroup] = useState<Record<string, number>>({});
   const [progress, setProgress] = useState(0);
+  const [isRegisteringChild, setIsRegisteringChild] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState("사진을 준비하고 있어요.");
+  const [recognitionMessage, setRecognitionMessage] = useState("");
   const [message, setMessage] = useState("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
   const photoUrls = useRef<string[]>([]);
   const childUrls = useRef<string[]>([]);
@@ -61,17 +64,35 @@ export default function Home() {
     [goodPhotos, shotTypes, names, activityByPhoto, children, qualityScores],
   );
 
-  const addChild = () => {
+  const addChild = async () => {
     if (!childName.trim() || !childPhoto) {
       setMessage("아이 이름과 얼굴이 잘 보이는 대표 사진을 함께 넣어 주세요.");
       return;
     }
-    const child = { id: Date.now(), name: childName.trim(), url: URL.createObjectURL(childPhoto) };
-    setChildren((current) => [...current, child]);
-    setGoals((current) => ({ ...current, [child.id]: 3 }));
-    setChildName("");
-    setChildPhoto(null);
-    setMessage(`${child.name} 아이를 추가했어요.`);
+    const url = URL.createObjectURL(childPhoto);
+    setIsRegisteringChild(true);
+    setMessage(`${childName.trim()} 아이의 얼굴 특징을 확인하고 있어요.`);
+    try {
+      const faces = await describeFaces(url);
+      if (faces.length !== 1) {
+        URL.revokeObjectURL(url);
+        setMessage(faces.length === 0
+          ? "얼굴을 찾지 못했어요. 얼굴이 크고 선명하게 보이는 사진을 선택해 주세요."
+          : "대표 사진에는 한 아이의 얼굴만 보여야 해요. 한 명만 나온 사진을 선택해 주세요.");
+        return;
+      }
+      const child = { id: Date.now(), name: childName.trim(), url, descriptor: faces[0].descriptor };
+      setChildren((current) => [...current, child]);
+      setGoals((current) => ({ ...current, [child.id]: 3 }));
+      setChildName("");
+      setChildPhoto(null);
+      setMessage(`${child.name} 아이의 얼굴 특징을 등록했어요.`);
+    } catch {
+      URL.revokeObjectURL(url);
+      setMessage("얼굴 인식 준비에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsRegisteringChild(false);
+    }
   };
 
   const removeChild = (id: number) => {
@@ -79,6 +100,9 @@ export default function Home() {
     if (child) URL.revokeObjectURL(child.url);
     setChildren((current) => current.filter((item) => item.id !== id));
     setNames((current) => Object.fromEntries(Object.entries(current).filter(([, childId]) => childId !== id)));
+    setMatchedChildren((current) => Object.fromEntries(
+      Object.entries(current).map(([photoId, ids]) => [photoId, ids.filter((childId) => childId !== id)]),
+    ));
   };
 
   const pickPhotos = (event: ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +124,7 @@ export default function Home() {
     setQualityReasons({});
     setQualityScores({});
     setNames({});
+    setMatchedChildren({});
     setSelected(next.map((photo) => photo.id));
     setBestByGroup({});
     setMessage(`${next.length}장의 사진을 불러왔어요. 분석을 시작해 주세요.`);
@@ -109,20 +134,27 @@ export default function Home() {
     if (!photos.length) return;
     setStage("analyzing");
     setProgress(4);
-    setAnalysisMessage("흔들림과 밝기, 배경을 살펴보고 있어요.");
+    setAnalysisMessage("얼굴 인식 모델을 준비하고 있어요.");
 
     const analyses: Array<{ photo: Photo; result: ImageAnalysis }> = [];
-    for (let index = 0; index < photos.length; index += 1) {
-      const photo = photos[index];
-      analyses.push({ photo, result: await analyzeImage(photo.url) });
-      setProgress(Math.round(((index + 1) / photos.length) * 62));
+    try {
+      await loadFaceModels();
+      setAnalysisMessage("얼굴 특징과 흔들림, 밝기를 함께 살펴보고 있어요.");
+      for (let index = 0; index < photos.length; index += 1) {
+        const photo = photos[index];
+        analyses.push({ photo, result: await analyzeImage(photo.url) });
+        setProgress(6 + Math.round(((index + 1) / photos.length) * 86));
+      }
+    } catch {
+      setStage("upload");
+      setMessage("얼굴 인식 모델을 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+      return;
     }
 
-    setAnalysisMessage("개인·단체 사진과 아이 얼굴을 분류하고 있어요.");
-    const childSignatures = await Promise.all(
-      children.map(async (child) => ({ id: child.id, signature: await faceSignature(child.url) })),
-    );
+    setAnalysisMessage("등록한 아이 얼굴과 비교해 분류하고 있어요.");
+    const references = children.map((child) => ({ id: child.id, descriptor: child.descriptor }));
     const nextNames: Record<number, number> = {};
+    const nextMatches: Record<number, number[]> = {};
     const nextQualities: Record<number, Quality> = {};
     const nextReasons: Record<number, string[]> = {};
     const nextScores: Record<number, number> = {};
@@ -133,11 +165,15 @@ export default function Home() {
       nextReasons[photo.id] = result.reasons;
       nextScores[photo.id] = result.score;
       nextShotTypes[photo.id] = result.shotType;
-      if (result.shotType === "individual" && result.signature && childSignatures.length) {
-        const matched = closestChild(result.signature, childSignatures);
-        if (matched && matched.confidence >= 48) nextNames[photo.id] = matched.id;
+      const recognized = Array.from(new Set(result.descriptors
+        .map((descriptor) => closestChild(descriptor, references))
+        .filter((match): match is FaceMatch => Boolean(match))
+        .map((match) => match.id)));
+      nextMatches[photo.id] = recognized;
+      if (result.shotType === "individual" && recognized.length === 1) {
+        nextNames[photo.id] = recognized[0];
       }
-      setProgress(62 + Math.round(((index + 1) / analyses.length) * 34));
+      setProgress(92 + Math.round(((index + 1) / analyses.length) * 7));
     });
 
     setQualities(nextQualities);
@@ -145,7 +181,12 @@ export default function Home() {
     setQualityScores(nextScores);
     setShotTypes(nextShotTypes);
     setNames(nextNames);
+    setMatchedChildren(nextMatches);
     setSelected(photos.filter((photo) => nextQualities[photo.id] === "good").map((photo) => photo.id));
+    const recognizedPhotoCount = Object.values(nextMatches).filter((ids) => ids.length > 0).length;
+    setRecognitionMessage(children.length
+      ? `${photos.length}장 중 ${recognizedPhotoCount}장에서 등록한 아이를 찾았어요. 단체 사진 속 아이도 아이별 정리에 함께 표시돼요.`
+      : "등록한 아이가 없어 얼굴별 이름 분류는 건너뛰었어요.");
     setProgress(100);
     setAnalysisMessage("분류 제안을 준비했어요.");
     window.setTimeout(() => {
@@ -186,24 +227,31 @@ export default function Home() {
     setQualityScores({});
     setShotTypes({});
     setNames({});
+    setMatchedChildren({});
     setActivityByPhoto({});
     setSelected([]);
     setBestByGroup({});
+    setRecognitionMessage("");
     setStage("upload");
     setView("best");
     setMessage("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
   };
 
   const downloadList = () => {
-    const header = "선택\t품질\t사진구분\t아이\t놀이영역\t베스트\t파일명";
+    const header = "선택\t품질\t사진구분\t아이\t인식된 아이\t놀이영역\t베스트\t파일명";
     const rows = goodPhotos.map((photo) => {
       const child = children.find((item) => item.id === names[photo.id]);
       const key = bestKey(photo, shotTypes, names, activityByPhoto, children);
+      const recognized = (matchedChildren[photo.id] ?? [])
+        .map((id) => children.find((item) => item.id === id)?.name)
+        .filter(Boolean)
+        .join(", ");
       return [
         selected.includes(photo.id) ? "선택" : "미선택",
         "잘 나온 사진",
         shotTypes[photo.id] === "group" ? "단체" : "개인",
         shotTypes[photo.id] === "group" ? "단체" : child?.name ?? "미분류",
+        recognized || "미인식",
         activityByPhoto[photo.id] ?? "미분류",
         (bestByGroup[key] ?? groupedCandidates[key]?.[0]?.id) === photo.id ? "베스트" : "",
         photo.name,
@@ -213,7 +261,7 @@ export default function Home() {
   };
 
   const downloadPhotoArchive = async () => {
-    const header = "선택\t품질\t사진구분\t아이\t놀이영역\t베스트\t파일명";
+    const header = "선택\t품질\t사진구분\t아이\t인식된 아이\t놀이영역\t베스트\t파일명";
     const rows: string[] = [];
     const entries = await Promise.all(selectedGoodPhotos.map(async (photo, index) => {
       const type = shotTypes[photo.id] ?? "individual";
@@ -222,7 +270,11 @@ export default function Home() {
       const activity = activityByPhoto[photo.id] ?? "미분류";
       const key = bestKey(photo, shotTypes, names, activityByPhoto, children);
       const isBest = (bestByGroup[key] ?? groupedCandidates[key]?.[0]?.id) === photo.id;
-      rows.push(["선택", "잘 나온 사진", type === "group" ? "단체" : "개인", owner, activity, isBest ? "베스트" : "", photo.name].join("\t"));
+      const recognized = (matchedChildren[photo.id] ?? [])
+        .map((id) => children.find((item) => item.id === id)?.name)
+        .filter(Boolean)
+        .join(", ");
+      rows.push(["선택", "잘 나온 사진", type === "group" ? "단체" : "개인", owner, recognized || "미인식", activity, isBest ? "베스트" : "", photo.name].join("\t"));
       const response = await fetch(photo.url);
       const data = new Uint8Array(await response.arrayBuffer());
       const folder = type === "group" ? `단체/${activity}` : `개인/${owner}/${activity}`;
@@ -265,6 +317,7 @@ export default function Home() {
           childName={childName}
           childPhoto={childPhoto}
           message={message}
+          isRegisteringChild={isRegisteringChild}
           setChildName={setChildName}
           setChildPhoto={setChildPhoto}
           addChild={addChild}
@@ -290,6 +343,7 @@ export default function Home() {
       {stage === "workspace" && (
         <section className="workspace-page">
           <p className="eyebrow">단계 {Object.keys(viewLabels).indexOf(view) + 2} · {viewLabels[view]}</p>
+          {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
           {view === "best" && (
             <BestRecommendations
               groups={groupedCandidates}
@@ -312,6 +366,7 @@ export default function Home() {
               children={children}
               shotTypes={shotTypes}
               names={names}
+              matchedChildren={matchedChildren}
               activityByPhoto={activityByPhoto}
               selected={selected}
               toggleSelected={toggleSelected}
@@ -320,7 +375,9 @@ export default function Home() {
           {view === "groups" && (
             <GroupOrganization
               photos={goodPhotos}
+              children={children}
               shotTypes={shotTypes}
+              matchedChildren={matchedChildren}
               activityByPhoto={activityByPhoto}
               selected={selected}
               setActivityByPhoto={setActivityByPhoto}
@@ -355,9 +412,10 @@ function UploadStage(props: {
   childName: string;
   childPhoto: File | null;
   message: string;
+  isRegisteringChild: boolean;
   setChildName: (value: string) => void;
   setChildPhoto: (value: File | null) => void;
-  addChild: () => void;
+  addChild: () => Promise<void>;
   removeChild: (id: number) => void;
   pickPhotos: (event: ChangeEvent<HTMLInputElement>) => void;
   analyzeAll: () => Promise<void>;
@@ -378,7 +436,9 @@ function UploadStage(props: {
             <input type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
             {props.childPhoto ? props.childPhoto.name : "대표 얼굴 사진 선택"}
           </label>
-          <button onClick={props.addChild}>아이 추가</button>
+          <button disabled={props.isRegisteringChild} onClick={() => void props.addChild()}>
+            {props.isRegisteringChild ? "얼굴 확인 중…" : "아이 추가"}
+          </button>
         </div>
         {props.children.length ? (
           <div className="child-list child-setup-list">
@@ -391,7 +451,7 @@ function UploadStage(props: {
               </div>
             ))}
           </div>
-        ) : <p className="helper setup-helper">아이를 등록하지 않아도 개인·단체와 놀이영역 분류는 사용할 수 있어요.</p>}
+        ) : <p className="helper setup-helper">정면에 가깝고 한 아이만 선명하게 나온 사진을 등록하면, 표정·옷·머리·자세가 달라져도 얼굴 특징을 기준으로 찾아요.</p>}
       </section>
 
       <section className="soft-card upload-card">
@@ -600,6 +660,7 @@ function ByChild(props: {
   children: Child[];
   shotTypes: Record<number, ShotType>;
   names: Record<number, number>;
+  matchedChildren: Record<number, number[]>;
   activityByPhoto: Record<number, Activity>;
   selected: number[];
   toggleSelected: (id: number) => void;
@@ -610,13 +671,16 @@ function ByChild(props: {
       <p className="page-lede">아이 아래에 놀이영역별 사진 수와 실제 사진을 표시해요. 사진을 눌러 결과 포함 여부도 바꿀 수 있어요.</p>
       <div className="child-detail-list">
         {props.children.map((child) => {
-          const childPhotos = props.photos.filter((photo) => props.shotTypes[photo.id] === "individual" && props.names[photo.id] === child.id);
+          const childPhotos = props.photos.filter((photo) => props.shotTypes[photo.id] === "individual"
+            ? props.names[photo.id] === child.id
+            : props.matchedChildren[photo.id]?.includes(child.id));
           const picked = childPhotos.filter((photo) => props.selected.includes(photo.id)).length;
+          const groupCount = childPhotos.filter((photo) => props.shotTypes[photo.id] === "group").length;
           return (
             <section className="soft-card child-detail-card" key={child.id}>
               <div className="child-heading large">
                 <img src={child.url} alt={`${child.name} 대표 얼굴`} />
-                <div><strong>{child.name}</strong><small>선택 {picked}장 · 분류 {childPhotos.length}장</small></div>
+                <div><strong>{child.name}</strong><small>선택 {picked}장 · 인식 {childPhotos.length}장 · 단체 {groupCount}장 포함</small></div>
               </div>
               <ActivitySummary photos={childPhotos} activityByPhoto={props.activityByPhoto} />
               <SelectablePhotoGrid photos={childPhotos} selected={props.selected} toggleSelected={props.toggleSelected} activityByPhoto={props.activityByPhoto} />
@@ -631,7 +695,9 @@ function ByChild(props: {
 
 function GroupOrganization(props: {
   photos: Photo[];
+  children: Child[];
   shotTypes: Record<number, ShotType>;
+  matchedChildren: Record<number, number[]>;
   activityByPhoto: Record<number, Activity>;
   selected: number[];
   setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
@@ -656,17 +722,23 @@ function GroupOrganization(props: {
           <section className="soft-card group-organize-card" key={activity}>
             <div className="group-title"><strong>{activity}</strong><span>{list.length}장</span></div>
             <div className="group-organize-grid">
-              {list.map((photo) => (
-                <article className={props.selected.includes(photo.id) ? "picked" : ""} key={photo.id}>
-                  <img src={photo.url} alt={photo.name} />
-                  <select value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>
-                    {activities.map((item) => <option value={item} key={item}>{item}</option>)}
-                  </select>
-                  <button className={`select-row ${props.selected.includes(photo.id) ? "checked" : ""}`} onClick={() => props.toggleSelected(photo.id)}>
-                    {props.selected.includes(photo.id) ? "✓ 결과 포함" : "결과 제외"}
-                  </button>
-                </article>
-              ))}
+              {list.map((photo) => {
+                const recognizedNames = (props.matchedChildren[photo.id] ?? [])
+                  .map((id) => props.children.find((child) => child.id === id)?.name)
+                  .filter((name): name is string => Boolean(name));
+                return (
+                  <article className={props.selected.includes(photo.id) ? "picked" : ""} key={photo.id}>
+                    <img src={photo.url} alt={photo.name} />
+                    {recognizedNames.length > 0 && <div className="face-match-tags">{recognizedNames.map((name) => <span key={name}>✓ {name}</span>)}</div>}
+                    <select value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>
+                      {activities.map((item) => <option value={item} key={item}>{item}</option>)}
+                    </select>
+                    <button className={`select-row ${props.selected.includes(photo.id) ? "checked" : ""}`} onClick={() => props.toggleSelected(photo.id)}>
+                      {props.selected.includes(photo.id) ? "✓ 결과 포함" : "결과 제외"}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
           </section>
         ))}
@@ -859,14 +931,15 @@ function guessActivity(name: string): Activity {
 
 async function analyzeImage(url: string): Promise<ImageAnalysis> {
   const image = await loadImage(url);
-  if (!image) return { quality: "bad", reasons: ["사진을 읽지 못함"], shotType: "individual", signature: null, score: 0 };
-  const faces = await detectFaces(image);
+  if (!image) return { quality: "bad", reasons: ["사진을 읽지 못함"], shotType: "individual", descriptors: [], score: 0 };
+  const faceResults = await describeFaces(image);
+  const faces = faceResults.map((result) => result.box);
   const canvas = document.createElement("canvas");
   const size = 120;
   canvas.width = size;
   canvas.height = size;
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return { quality: "good", reasons: ["직접 확인 권장"], shotType: faces.length > 1 ? "group" : "individual", signature: null, score: 65 };
+  if (!context) return { quality: "good", reasons: ["직접 확인 권장"], shotType: faces.length > 1 ? "group" : "individual", descriptors: faceResults.map((result) => result.descriptor), score: 65 };
   context.drawImage(image, 0, 0, size, size);
   const data = context.getImageData(0, 0, size, size).data;
   const gray = new Float32Array(size * size);
@@ -902,63 +975,72 @@ async function analyzeImage(url: string): Promise<ImageAnalysis> {
     quality,
     reasons,
     shotType: faces.length > 1 ? "group" : "individual",
-    signature: faces.length <= 1 ? await faceSignature(url, faces[0]) : null,
+    descriptors: faceResults.map((result) => result.descriptor),
     score,
   };
 }
 
 type FaceBox = { x: number; y: number; width: number; height: number };
-type FaceDetectorConstructor = new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => {
-  detect: (source: CanvasImageSource) => Promise<Array<{ boundingBox: DOMRectReadOnly }>>;
-};
+type FaceDescription = { box: FaceBox; descriptor: number[]; score: number };
+type FaceReference = { id: number; descriptor: number[] };
+type FaceMatch = { id: number; distance: number; confidence: number };
+type FaceApiModule = typeof import("@vladmandic/face-api");
 
-async function detectFaces(image: HTMLImageElement): Promise<FaceBox[]> {
-  const Detector = (window as unknown as { FaceDetector?: FaceDetectorConstructor }).FaceDetector;
-  if (!Detector) return [];
-  try {
-    const faces = await new Detector({ fastMode: true, maxDetectedFaces: 12 }).detect(image);
-    return faces.map(({ boundingBox }) => ({ x: boundingBox.x, y: boundingBox.y, width: boundingBox.width, height: boundingBox.height }));
-  } catch {
-    return [];
+let faceModelsPromise: Promise<FaceApiModule> | null = null;
+
+function loadFaceModels(): Promise<FaceApiModule> {
+  if (!faceModelsPromise) {
+    faceModelsPromise = import("@vladmandic/face-api").then(async (faceapi) => {
+      const modelPath = "/face-models";
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(modelPath),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromUri(modelPath),
+      ]);
+      return faceapi;
+    }).catch((error) => {
+      faceModelsPromise = null;
+      throw error;
+    });
   }
+  return faceModelsPromise;
 }
 
-async function faceSignature(url: string, knownFace?: FaceBox): Promise<number[] | null> {
-  const image = await loadImage(url);
-  if (!image) return null;
-  const detected = knownFace ? [knownFace] : await detectFaces(image);
-  const face = detected.sort((left, right) => right.width * right.height - left.width * left.height)[0];
-  const crop = face
-    ? {
-        x: Math.max(0, face.x - face.width * 0.28),
-        y: Math.max(0, face.y - face.height * 0.36),
-        width: Math.min(image.naturalWidth - Math.max(0, face.x - face.width * 0.28), face.width * 1.56),
-        height: Math.min(image.naturalHeight - Math.max(0, face.y - face.height * 0.36), face.height * 1.72),
-      }
-    : { x: image.naturalWidth * 0.2, y: image.naturalHeight * 0.06, width: image.naturalWidth * 0.6, height: image.naturalHeight * 0.7 };
-  const canvas = document.createElement("canvas");
-  canvas.width = 20;
-  canvas.height = 20;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return null;
-  context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, 20, 20);
-  const pixels = context.getImageData(0, 0, 20, 20).data;
-  const values: number[] = [];
-  for (let index = 0; index < pixels.length; index += 4) values.push((pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114) / 255);
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const deviation = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length) || 1;
-  return values.map((value) => Math.max(-2, Math.min(2, (value - mean) / deviation)) / 2);
+async function describeFaces(source: string | HTMLImageElement): Promise<FaceDescription[]> {
+  const faceapi = await loadFaceModels();
+  const image = typeof source === "string" ? await loadImage(source) : source;
+  if (!image) return [];
+  const results = await faceapi
+    .detectAllFaces(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.32 }))
+    .withFaceLandmarks(true)
+    .withFaceDescriptors();
+  return results.map((result) => ({
+    box: {
+      x: result.detection.box.x,
+      y: result.detection.box.y,
+      width: result.detection.box.width,
+      height: result.detection.box.height,
+    },
+    descriptor: Array.from(result.descriptor),
+    score: result.detection.score,
+  }));
 }
 
-function closestChild(signature: number[], children: Array<{ id: number; signature: number[] | null }>): { id: number; distance: number; confidence: number } | null {
-  let best: { id: number; distance: number; confidence: number } | null = null;
-  for (const child of children) {
-    if (!child.signature) continue;
-    const distance = signature.reduce((sum, value, index) => sum + Math.abs(value - child.signature![index]), 0) / signature.length;
-    const confidence = Math.max(0, Math.min(99, Math.round(100 - distance * 155)));
-    if (!best || distance < best.distance) best = { id: child.id, distance, confidence };
-  }
-  return best;
+function closestChild(descriptor: number[], children: FaceReference[]): FaceMatch | null {
+  const candidates = children
+    .map((child) => ({
+      id: child.id,
+      distance: Math.sqrt(descriptor.reduce((sum, value, index) => sum + (value - child.descriptor[index]) ** 2, 0)),
+    }))
+    .sort((left, right) => left.distance - right.distance);
+  const best = candidates[0];
+  if (!best || best.distance > 0.58) return null;
+  const second = candidates[1];
+  if (second && second.distance - best.distance < 0.045) return null;
+  return {
+    ...best,
+    confidence: Math.max(1, Math.min(99, Math.round((1 - best.distance / 0.72) * 100))),
+  };
 }
 
 function loadImage(url: string): Promise<HTMLImageElement | null> {
