@@ -5,4 +5,5 @@ dist
 .wrangler
 out
 .env*
+!.env.example
 사진선별/

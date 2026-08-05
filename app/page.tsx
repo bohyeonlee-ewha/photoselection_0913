@@ -8,7 +8,8 @@ type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체" | "미술" | "감각·과학" | "수·조작" | "음률" | "기타" | "미분류";
 type Photo = { id: number; name: string; url: string };
-type Child = { id: number; name: string; url: string; descriptor: number[] };
+type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
+type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
 type ImageAnalysis = {
   quality: Quality;
@@ -50,6 +51,8 @@ export default function Home() {
   const [analysisMessage, setAnalysisMessage] = useState("사진을 준비하고 있어요.");
   const [recognitionMessage, setRecognitionMessage] = useState("");
   const [message, setMessage] = useState("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const photoUrls = useRef<string[]>([]);
   const childUrls = useRef<string[]>([]);
 
@@ -57,7 +60,33 @@ export default function Home() {
   useEffect(() => { childUrls.current = children.map((child) => child.url); }, [children]);
   useEffect(() => () => {
     photoUrls.current.forEach((url) => URL.revokeObjectURL(url));
-    childUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    childUrls.current.filter((url) => url.startsWith("blob:")).forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const sessionResponse = await fetch("/api/session", { signal: controller.signal });
+        const session = await sessionResponse.json() as { user: SessionUser | null };
+        setUser(session.user);
+        if (session.user) {
+          const childrenResponse = await fetch("/api/children", { signal: controller.signal });
+          if (!childrenResponse.ok) throw new Error("아이 목록을 불러오지 못했습니다.");
+          const saved = await childrenResponse.json() as { children: Child[] };
+          setChildren(saved.children);
+          setGoals(Object.fromEntries(saved.children.map((child) => [child.id, 3])));
+          setMessage(saved.children.length
+            ? `저장된 아이 ${saved.children.length}명을 불러왔어요.`
+            : "로그인했어요. 등록한 아이는 다음 접속에도 자동으로 불러와요.");
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") setMessage("저장된 아이 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        if (!controller.signal.aborted) setSessionLoaded(true);
+      }
+    })();
+    return () => controller.abort();
   }, []);
 
   const goodPhotos = photos.filter((photo) => qualities[photo.id] !== "bad");
@@ -84,23 +113,43 @@ export default function Home() {
           : "대표 사진에는 한 아이의 얼굴만 보여야 해요. 한 명만 나온 사진을 선택해 주세요.");
         return;
       }
-      const child = { id: Date.now(), name: childName.trim(), url, descriptor: faces[0].descriptor };
+      let child: Child = { id: Date.now(), name: childName.trim(), url, descriptor: faces[0].descriptor, persisted: false };
+      if (user) {
+        const form = new FormData();
+        form.set("name", child.name);
+        form.set("image", childPhoto);
+        form.set("descriptor", JSON.stringify(child.descriptor));
+        const response = await fetch("/api/children", { method: "POST", body: form });
+        const result = await response.json() as { child?: Child; error?: string };
+        if (!response.ok || !result.child) throw new Error(result.error ?? "아이 저장에 실패했습니다.");
+        URL.revokeObjectURL(url);
+        child = result.child;
+      }
       setChildren((current) => [...current, child]);
       setGoals((current) => ({ ...current, [child.id]: 3 }));
       setChildName("");
       setChildPhoto(null);
-      setMessage(`${child.name} 아이의 얼굴 특징을 등록했어요.`);
-    } catch {
+      setMessage(user
+        ? `${child.name} 아이의 이름과 대표사진을 계정에 저장했어요.`
+        : `${child.name} 아이를 임시로 등록했어요. 로그인하면 다음에도 불러올 수 있어요.`);
+    } catch (error) {
       URL.revokeObjectURL(url);
-      setMessage("얼굴 인식 준비에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setMessage(error instanceof Error ? error.message : "아이 등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setIsRegisteringChild(false);
     }
   };
 
-  const removeChild = (id: number) => {
+  const removeChild = async (id: number) => {
     const child = children.find((item) => item.id === id);
-    if (child) URL.revokeObjectURL(child.url);
+    if (child?.persisted) {
+      const response = await fetch(`/api/children/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setMessage("저장된 아이를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+    }
+    if (child?.url.startsWith("blob:")) URL.revokeObjectURL(child.url);
     setChildren((current) => current.filter((item) => item.id !== id));
     setNames((current) => Object.fromEntries(Object.entries(current).filter(([, childId]) => childId !== id)));
     setMatchedChildren((current) => Object.fromEntries(
@@ -236,9 +285,7 @@ export default function Home() {
 
   const reset = () => {
     photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-    children.forEach((child) => URL.revokeObjectURL(child.url));
     setPhotos([]);
-    setChildren([]);
     setQualities({});
     setQualityReasons({});
     setQualityScores({});
@@ -317,7 +364,15 @@ export default function Home() {
     <main className="shell">
       <header className="masthead">
         <button className="brand brand-button" onClick={() => setStage("upload")}>사진 고르기 <span>✦</span></button>
-        {photos.length > 0 && <button className="home-button" onClick={reset}>새 작업</button>}
+        <div className="account-actions">
+          {photos.length > 0 && <button className="home-button" onClick={reset}>새 작업</button>}
+          {sessionLoaded && (user ? (
+            <>
+              <span className="account-email">{user.email ?? "로그인됨"}</span>
+              <a className="account-link" href="/signout-with-chatgpt?return_to=/">로그아웃</a>
+            </>
+          ) : <a className="account-link primary-account" href="/signin-with-chatgpt?return_to=/">로그인해 아이 저장</a>)}
+        </div>
       </header>
 
       {stage !== "analyzing" && (
@@ -459,7 +514,7 @@ function UploadStage(props: {
   setChildName: (value: string) => void;
   setChildPhoto: (value: File | null) => void;
   addChild: () => Promise<void>;
-  removeChild: (id: number) => void;
+  removeChild: (id: number) => Promise<void>;
   pickPhotos: (event: ChangeEvent<HTMLInputElement>, mode: "replace" | "append") => void;
   analyzeAll: () => Promise<void>;
 }) {
@@ -490,7 +545,7 @@ function UploadStage(props: {
                 <b className="child-number">{index + 1}</b>
                 <img src={child.url} alt={`${child.name} 대표 얼굴`} />
                 <span>{child.name}</span>
-                <button onClick={() => props.removeChild(child.id)} aria-label={`${child.name} 삭제`}>×</button>
+                <button onClick={() => void props.removeChild(child.id)} aria-label={`${child.name} 삭제`}>×</button>
               </div>
             ))}
           </div>
