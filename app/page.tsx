@@ -6,8 +6,8 @@ type Stage = "upload" | "analyzing" | "workspace";
 type View = "individualBest" | "children" | "activities" | "groupBest" | "groups" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
-type Activity = "신체" | "미술" | "감각·과학" | "수·조작" | "음률" | "기타" | "미분류";
-type Photo = { id: number; name: string; url: string };
+type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "바깥놀이" | "기타" | "미분류";
+type Photo = { id: number; name: string; url: string; persisted?: boolean };
 type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
 type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
@@ -19,7 +19,7 @@ type ImageAnalysis = {
   score: number;
 };
 
-const activities: Activity[] = ["신체", "미술", "감각·과학", "수·조작", "음률", "기타", "미분류"];
+const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "바깥놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = {
   individualBest: "개인사진 베스트 추천",
   children: "아이별 정리",
@@ -46,6 +46,8 @@ export default function Home() {
   const [selected, setSelected] = useState<number[]>([]);
   const [goals, setGoals] = useState<Record<number, number>>({});
   const [bestByGroup, setBestByGroup] = useState<Record<string, number>>({});
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [duplicateOf, setDuplicateOf] = useState<Record<number, number>>({});
   const [progress, setProgress] = useState(0);
   const [isRegisteringChild, setIsRegisteringChild] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState("사진을 준비하고 있어요.");
@@ -76,6 +78,30 @@ export default function Home() {
           const saved = await childrenResponse.json() as { children: Child[] };
           setChildren(saved.children);
           setGoals(Object.fromEntries(saved.children.map((child) => [child.id, 3])));
+          const photosResponse = await fetch("/api/photos", { signal: controller.signal });
+          if (photosResponse.ok) {
+            const savedPhotos = await photosResponse.json() as {
+              sessionId: number | null;
+              goals: Record<string, number>;
+              photos: Array<{ id: number; name: string; url: string; quality: Quality; reasons: string[]; score: number | null; shotType: ShotType; childId: number; matchedChildIds: number[]; activity: Activity | null; selected: boolean; bestKey: string | null; isBest: boolean; duplicateOf: number | null }>;
+            };
+            if (savedPhotos.sessionId && savedPhotos.photos.length) {
+              setSessionId(savedPhotos.sessionId);
+              setPhotos(savedPhotos.photos.map((photo) => ({ id: photo.id, name: photo.name, url: photo.url, persisted: true })));
+              setQualities(Object.fromEntries(savedPhotos.photos.map((photo) => [photo.id, photo.quality])));
+              setQualityReasons(Object.fromEntries(savedPhotos.photos.map((photo) => [photo.id, photo.reasons])));
+              setQualityScores(Object.fromEntries(savedPhotos.photos.filter((photo) => photo.score !== null).map((photo) => [photo.id, photo.score as number])));
+              setShotTypes(Object.fromEntries(savedPhotos.photos.map((photo) => [photo.id, photo.shotType])));
+              setNames(Object.fromEntries(savedPhotos.photos.filter((photo) => photo.childId).map((photo) => [photo.id, photo.childId])));
+              setMatchedChildren(Object.fromEntries(savedPhotos.photos.map((photo) => [photo.id, photo.matchedChildIds])));
+              setActivityByPhoto(Object.fromEntries(savedPhotos.photos.filter((photo) => photo.activity).map((photo) => [photo.id, photo.activity as Activity])));
+              setSelected(savedPhotos.photos.filter((photo) => photo.selected).map((photo) => photo.id));
+              setBestByGroup(Object.fromEntries(savedPhotos.photos.filter((photo) => photo.bestKey && photo.isBest).map((photo) => [photo.bestKey as string, photo.id])));
+              setDuplicateOf(Object.fromEntries(savedPhotos.photos.filter((photo) => photo.duplicateOf).map((photo) => [photo.id, photo.duplicateOf as number])));
+              setGoals(savedPhotos.goals);
+              setStage("workspace");
+            }
+          }
           setMessage(saved.children.length
             ? `저장된 아이 ${saved.children.length}명을 불러왔어요.`
             : "로그인했어요. 등록한 아이는 다음 접속에도 자동으로 불러와요.");
@@ -89,7 +115,7 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
-  const goodPhotos = photos.filter((photo) => qualities[photo.id] !== "bad");
+  const goodPhotos = photos.filter((photo) => qualities[photo.id] !== "bad" && !duplicateOf[photo.id]);
   const selectedGoodPhotos = goodPhotos.filter((photo) => selected.includes(photo.id));
   const groupedCandidates = useMemo(
     () => groupForBest(goodPhotos, shotTypes, names, activityByPhoto, children, qualityScores),
@@ -157,8 +183,8 @@ export default function Home() {
     ));
   };
 
-  const pickPhotos = (event: ChangeEvent<HTMLInputElement>, mode: "replace" | "append") => {
-    const files = Array.from(event.target.files ?? []);
+  const pickPhotos = async (event: ChangeEvent<HTMLInputElement>, mode: "replace" | "append") => {
+    const files = Array.from(event.target.files ?? []) as File[];
     const total = mode === "append" ? photos.length + files.length : files.length;
     if (total > 100) {
       setMessage(`사진은 최대 100장까지 올릴 수 있어요. 현재 ${photos.length}장이 선택되어 있어요.`);
@@ -174,6 +200,12 @@ export default function Home() {
     if (mode === "replace") photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     const firstId = mode === "append" ? Math.max(0, ...photos.map((photo) => photo.id)) + 1 : 1;
     const next = files.map((file, index) => ({ id: firstId + index, name: file.name, url: URL.createObjectURL(file) }));
+    let duplicateMatches: Record<number, number> = {};
+    try {
+      duplicateMatches = await detectDuplicatePhotos(next, mode === "append" ? photos : []);
+    } catch {
+      // Duplicate detection is best-effort; an upload must still work if a preview cannot be read.
+    }
     const defaults = Object.fromEntries(next.map((photo) => [photo.id, "good" as Quality]));
     const defaultTypes = Object.fromEntries(next.map((photo) => [photo.id, "individual" as ShotType]));
     const defaultActivities = Object.fromEntries(next.map((photo) => [photo.id, guessActivity(photo.name)]));
@@ -187,6 +219,7 @@ export default function Home() {
       setNames({});
       setMatchedChildren({});
       setBestByGroup({});
+      setDuplicateOf({});
     }
     setSelected((current) => mode === "append" ? [...current, ...next.map((photo) => photo.id)] : next.map((photo) => photo.id));
     setRecognitionMessage("");
@@ -194,6 +227,28 @@ export default function Home() {
       ? `${next.length}장을 추가했어요. 총 ${total}장을 다시 분석해 주세요.`
       : `${next.length}장의 사진을 불러왔어요. 분석을 시작해 주세요.`);
     event.target.value = "";
+    if (!user) setDuplicateOf((current) => mode === "append" ? { ...current, ...duplicateMatches } : duplicateMatches);
+    if (user) {
+      try {
+        const form = new FormData();
+        files.forEach((file) => form.append("files", file));
+        if (mode === "append" && sessionId) form.set("sessionId", String(sessionId));
+        const response = await fetch("/api/photos", { method: "POST", body: form });
+        const result = await response.json() as { sessionId?: number; photos?: Photo[]; error?: string };
+        if (!response.ok || !result.sessionId || !result.photos) throw new Error(result.error ?? "사진 저장에 실패했습니다.");
+        setSessionId(result.sessionId);
+        const saved = result.photos.map((photo) => ({ ...photo, persisted: true }));
+        next.forEach((photo) => URL.revokeObjectURL(photo.url));
+        setPhotos((current) => mode === "append" ? [...current.slice(0, -next.length), ...saved] : saved);
+        const localToSaved = new Map(next.map((photo, index) => [photo.id, saved[index]?.id]));
+        const savedDuplicates = Object.fromEntries(Object.entries(duplicateMatches)
+          .map(([id, target]) => [localToSaved.get(Number(id)), localToSaved.get(target) ?? target])
+          .filter(([id, target]) => id && target));
+        setDuplicateOf((current) => mode === "append" ? { ...current, ...savedDuplicates } : savedDuplicates);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "사진 저장에 실패했습니다.");
+      }
+    }
   };
 
   const analyzeAll = async () => {
@@ -225,12 +280,14 @@ export default function Home() {
     const nextReasons: Record<number, string[]> = {};
     const nextScores: Record<number, number> = {};
     const nextShotTypes: Record<number, ShotType> = {};
+    const nextActivities: Record<number, Activity> = {};
 
     analyses.forEach(({ photo, result }, index) => {
       nextQualities[photo.id] = result.quality;
       nextReasons[photo.id] = result.reasons;
       nextScores[photo.id] = result.score;
       nextShotTypes[photo.id] = result.shotType;
+      nextActivities[photo.id] = guessActivity(photo.name);
       const recognized = Array.from(new Set(result.descriptors
         .map((descriptor) => closestChild(descriptor, references))
         .filter((match): match is FaceMatch => Boolean(match))
@@ -248,6 +305,7 @@ export default function Home() {
     setShotTypes(nextShotTypes);
     setNames(nextNames);
     setMatchedChildren(nextMatches);
+    setActivityByPhoto((current) => ({ ...current, ...nextActivities }));
     setSelected(photos.filter((photo) => nextQualities[photo.id] === "good").map((photo) => photo.id));
     const recognizedPhotoCount = Object.values(nextMatches).filter((ids) => ids.length > 0).length;
     setRecognitionMessage(children.length
@@ -283,7 +341,8 @@ export default function Home() {
     setStage("workspace");
   };
 
-  const reset = () => {
+  const reset = async () => {
+    if (user && sessionId) await fetch(`/api/photos?sessionId=${sessionId}`, { method: "DELETE" });
     photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     setPhotos([]);
     setQualities({});
@@ -295,11 +354,43 @@ export default function Home() {
     setActivityByPhoto({});
     setSelected([]);
     setBestByGroup({});
+    setSessionId(null);
+    setDuplicateOf({});
     setRecognitionMessage("");
     setStage("upload");
     setView("individualBest");
     setMessage("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
   };
+
+  useEffect(() => {
+    if (!user || !sessionId || !photos.length || photos.some((photo) => !photo.persisted)) return;
+    const timer = window.setTimeout(() => {
+      const payload = photos.map((photo) => {
+        const key = bestKey(photo, shotTypes, names, activityByPhoto, children);
+        return {
+          id: photo.id,
+          quality: qualities[photo.id],
+          reasons: qualityReasons[photo.id] ?? [],
+          score: qualityScores[photo.id],
+          shotType: shotTypes[photo.id],
+          childId: names[photo.id],
+          matchedChildIds: matchedChildren[photo.id] ?? [],
+          activity: activityByPhoto[photo.id],
+          selected: selected.includes(photo.id),
+          bestKey: key,
+          isBest: (bestByGroup[key] ?? groupedCandidates[key]?.[0]?.id) === photo.id,
+          duplicateOf: duplicateOf[photo.id],
+          isDuplicate: Boolean(duplicateOf[photo.id]),
+        };
+      });
+      void fetch("/api/photos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, goals, photos: payload }),
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [user, sessionId, photos, qualities, qualityReasons, qualityScores, shotTypes, names, matchedChildren, activityByPhoto, selected, bestByGroup, goals, children, groupedCandidates, duplicateOf]);
 
   const downloadList = () => {
     const header = "선택\t품질\t사진구분\t아이\t인식된 아이\t놀이영역\t베스트\t파일명";
@@ -387,6 +478,7 @@ export default function Home() {
       {stage === "upload" && (
         <UploadStage
           photos={photos}
+          duplicateCount={Object.keys(duplicateOf).length}
           children={children}
           childName={childName}
           childPhoto={childPhoto}
@@ -506,6 +598,7 @@ export default function Home() {
 
 function UploadStage(props: {
   photos: Photo[];
+  duplicateCount: number;
   children: Child[];
   childName: string;
   childPhoto: File | null;
@@ -572,7 +665,7 @@ function UploadStage(props: {
       </section>
 
       <div className="flow-footer">
-        <span>{props.message}</span>
+        <span>{props.duplicateCount ? `${props.message} 중복 사진 ${props.duplicateCount}장은 결과에서 자동 제외됩니다.` : props.message}</span>
         <button className="primary" disabled={!props.photos.length} onClick={() => void props.analyzeAll()}>
           품질·분류 분석 시작 <span>→</span>
         </button>
@@ -1116,7 +1209,7 @@ function groupForExport(photos: Photo[], shotTypes: Record<number, ShotType>, na
   }, {});
 }
 
-function guessActivity(name: string): Activity {
+function legacyGuessActivity(name: string): string {
   const lowered = name.toLowerCase();
   if (/신체|체육|운동|바깥|산책/.test(lowered)) return "신체";
   if (/미술|그림|물감|만들기|점토/.test(lowered)) return "미술";
@@ -1124,6 +1217,70 @@ function guessActivity(name: string): Activity {
   if (/수조작|수학|퍼즐|블록|조작/.test(lowered)) return "수·조작";
   if (/음률|음악|노래|악기|율동/.test(lowered)) return "음률";
   return "미분류";
+}
+
+function guessActivity(name: string): Activity {
+  const lowered = name.toLowerCase().replace(/[\s_-]/g, "");
+  if (/신체|체육|운동|달리기|바깥|산책|놀이터/.test(lowered)) return "신체활동";
+  if (/미술|그림|물감|만들기|공작|색칠|그리기|클레이/.test(lowered)) return "미술놀이";
+  if (/음률|음악|노래|악기|리듬|동요|율동/.test(lowered)) return "음률";
+  if (/역할|병원놀이|가게놀이|소꿉|인형놀이|극놀이/.test(lowered)) return "역할놀이";
+  if (/언어|동화|책|읽기|말하기|이야기|글자|낱말|동시/.test(lowered)) return "언어영역";
+  if (/수조작|수학|퍼즐|블록|조립|분류|수세기|보드게임/.test(lowered)) return "수·조작영역";
+  if (/감각|탐구|과학|실험|관찰|자연|요리|모래|물놀이|촉감/.test(lowered)) return "감각·탐구영역";
+  return "미분류";
+}
+
+async function detectDuplicatePhotos(next: Photo[], existing: Photo[]) {
+  const all = [...existing, ...next];
+  const fingerprints = await Promise.all(all.map(async (photo) => ({
+    id: photo.id,
+    exact: await exactImageHash(photo.url),
+    visual: await perceptualImageHash(photo.url),
+  })));
+  const matches: Record<number, number> = {};
+  next.forEach((photo) => {
+    const current = fingerprints.find((item) => item.id === photo.id);
+    if (!current) return;
+    const previous = fingerprints.slice(0, fingerprints.indexOf(current)).find((item) =>
+      item.exact === current.exact || hammingDistance(item.visual, current.visual) <= 5,
+    );
+    if (previous) matches[photo.id] = previous.id;
+  });
+  return matches;
+}
+
+async function exactImageHash(url: string) {
+  const response = await fetch(url);
+  const bytes = await response.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function perceptualImageHash(url: string) {
+  const image = await loadImage(url);
+  if (!image) return "";
+  const size = 16;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return "";
+  context.drawImage(image, 0, 0, size, size);
+  const data = context.getImageData(0, 0, size, size).data;
+  const values = Array.from({ length: size * size }, (_, index) => {
+    const pixel = index * 4;
+    return data[pixel] * 0.299 + data[pixel + 1] * 0.587 + data[pixel + 2] * 0.114;
+  });
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return values.map((value) => value >= average ? "1" : "0").join("");
+}
+
+function hammingDistance(left: string, right: string) {
+  if (!left || !right || left.length !== right.length) return Number.MAX_SAFE_INTEGER;
+  let distance = 0;
+  for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) distance += 1;
+  return distance;
 }
 
 async function analyzeImage(url: string): Promise<ImageAnalysis> {

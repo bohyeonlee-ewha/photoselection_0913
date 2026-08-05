@@ -1,0 +1,20 @@
+<svg width="520" height="160" viewBox="0 0 520 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">보담 로고</title>
+  <desc id="desc">두 손이 아이의 하루를 담아주는 모습을 표현한 보담의 심볼과 워드마크</desc>
+
+  <!-- Symbol: a rounded photo frame held by two gentle hands, with a sprout at its centre. -->
+  <g transform="translate(18 16)">
+    <rect x="0" y="0" width="128" height="128" rx="38" fill="#E7F3ED"/>
+    <path d="M32 78C35.8 99.1 53.1 113 73.5 113C94 113 111.6 99 115.7 78" stroke="#306B5B" stroke-width="9" stroke-linecap="round"/>
+    <path d="M28.5 70.5C31.6 47.7 50.4 30.5 73.5 30.5C96.6 30.5 115.2 47.7 118.5 70.5" stroke="#5C9B82" stroke-width="9" stroke-linecap="round"/>
+    <path d="M73.5 74V45" stroke="#306B5B" stroke-width="7" stroke-linecap="round"/>
+    <path d="M73.5 56C63.1 55.9 56.7 50.7 56.8 42.3C65.7 41.6 72.2 46.3 73.5 56Z" fill="#F4B49D"/>
+    <path d="M73.5 58C74.8 47.7 81.3 42.2 91.4 42.5C91.2 51.1 84.4 57.1 73.5 58Z" fill="#F4B49D"/>
+    <circle cx="73.5" cy="77" r="5" fill="#306B5B"/>
+  </g>
+
+  <g transform="translate(176 34)">
+    <text x="0" y="66" fill="#253746" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="68" font-weight="700" letter-spacing="-5">보담</text>
+    <text x="3" y="101" fill="#5C9B82" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="16" font-weight="600" letter-spacing="2.2">아이의 하루를 담다</text>
+  </g>
+</svg>

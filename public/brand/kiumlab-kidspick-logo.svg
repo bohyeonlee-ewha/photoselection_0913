@@ -1,0 +1,22 @@
+<svg width="720" height="190" viewBox="0 0 720 190" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">키움랩 키즈픽 로고</title>
+  <desc id="desc">아이의 성장과 사진 선택을 표현한 키움랩의 키즈픽 서비스 로고</desc>
+
+  <!-- Brand mark: a photo frame, a growing sprout, and a selection check. -->
+  <g transform="translate(20 20)">
+    <rect x="0" y="0" width="150" height="150" rx="45" fill="#24364B"/>
+    <path d="M42 89C47.3 117.2 68.1 134 94.8 134C121.1 134 142.2 117.2 147.5 89" stroke="#65B889" stroke-width="10" stroke-linecap="round"/>
+    <path d="M38 79C42.5 50.7 65.5 30.5 94.8 30.5C123.9 30.5 146.8 50.7 151.5 79" stroke="#F6D86B" stroke-width="10" stroke-linecap="round"/>
+    <path d="M94.8 87V54" stroke="#F7FAF8" stroke-width="8" stroke-linecap="round"/>
+    <path d="M94.5 65C82.7 64.8 75.5 58.7 75.8 49.2C86.3 48.5 93 54 94.5 65Z" fill="#65B889"/>
+    <path d="M95 67C96.5 55.7 103.9 49.2 114.7 49.6C114.3 59.1 106.8 65.7 95 67Z" fill="#65B889"/>
+    <path d="M67 98L84 114L124 72" stroke="#F6D86B" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(208 43)">
+    <text x="0" y="66" fill="#24364B" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="64" font-weight="750" letter-spacing="-4">키움랩</text>
+    <rect x="4" y="88" width="92" height="2" rx="1" fill="#65B889"/>
+    <text x="4" y="126" fill="#65B889" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="22" font-weight="700" letter-spacing="1.5">키즈픽</text>
+    <text x="116" y="126" fill="#718093" font-family="Pretendard, Apple SD Gothic Neo, Noto Sans KR, sans-serif" font-size="16" font-weight="500" letter-spacing="0.4">보육의 시간을 키우는 기술</text>
+  </g>
+</svg>
