@@ -44,6 +44,9 @@ export const schemaStatements = [
     duplicate_of BIGINT REFERENCES photos(id) ON DELETE SET NULL,
     is_duplicate BOOLEAN NOT NULL DEFAULT FALSE,
     perceptual_hash TEXT,
+    activity_confidence DOUBLE PRECISION,
+    activity_reason TEXT,
+    activity_source TEXT NOT NULL DEFAULT 'filename',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
@@ -63,4 +66,7 @@ export const schemaStatements = [
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS duplicate_of BIGINT REFERENCES photos(id) ON DELETE SET NULL`,
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS is_duplicate BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`,
+  `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_confidence DOUBLE PRECISION`,
+  `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_reason TEXT`,
+  `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_source TEXT NOT NULL DEFAULT 'filename'`,
 ] as const;

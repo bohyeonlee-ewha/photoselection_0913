@@ -299,13 +299,30 @@ export default function Home() {
       setProgress(92 + Math.round(((index + 1) / analyses.length) * 7));
     });
 
+    const classifiedActivities: Record<number, Activity> = Object.fromEntries(
+      photos.map((photo) => [photo.id, guessActivity(photo.name)]),
+    );
+    if (user) {
+      setAnalysisMessage("활동 영역을 사진 내용으로 분류하고 있어요…");
+      await Promise.all(photos.filter((photo) => photo.persisted).map(async (photo) => {
+        try {
+          const response = await fetch(`/api/photos/${photo.id}/classify`, { method: "POST", body: "{}" });
+          if (!response.ok) return;
+          const result = await response.json() as { activity?: Activity };
+          if (result.activity) classifiedActivities[photo.id] = result.activity;
+        } catch {
+          // Keep the filename-based suggestion when visual classification is unavailable.
+        }
+      }));
+    }
+
     setQualities(nextQualities);
     setQualityReasons(nextReasons);
     setQualityScores(nextScores);
     setShotTypes(nextShotTypes);
     setNames(nextNames);
     setMatchedChildren(nextMatches);
-    setActivityByPhoto((current) => ({ ...current, ...nextActivities }));
+    setActivityByPhoto((current) => ({ ...current, ...nextActivities, ...classifiedActivities }));
     setSelected(photos.filter((photo) => nextQualities[photo.id] === "good").map((photo) => photo.id));
     const recognizedPhotoCount = Object.values(nextMatches).filter((ids) => ids.length > 0).length;
     setRecognitionMessage(children.length
