@@ -302,19 +302,27 @@ export default function Home() {
     const classifiedActivities: Record<number, Activity> = Object.fromEntries(
       photos.map((photo) => [photo.id, guessActivity(photo.name)]),
     );
-    if (user) {
-      setAnalysisMessage("활동 영역을 사진 내용으로 분류하고 있어요…");
-      await Promise.all(photos.filter((photo) => photo.persisted).map(async (photo) => {
-        try {
-          const response = await fetch(`/api/photos/${photo.id}/classify`, { method: "POST", body: "{}" });
-          if (!response.ok) return;
-          const result = await response.json() as { activity?: Activity };
-          if (result.activity) classifiedActivities[photo.id] = result.activity;
-        } catch {
-          // Keep the filename-based suggestion when visual classification is unavailable.
+    setAnalysisMessage("활동 영역을 사진 내용으로 분류하고 있어요…");
+    await Promise.all(photos.map(async (photo) => {
+      try {
+        let response: Response;
+        if (user && photo.persisted) {
+          response = await fetch(`/api/photos/${photo.id}/classify`, { method: "POST", body: "{}" });
+        } else {
+          const imageResponse = await fetch(photo.url);
+          const blob = await imageResponse.blob();
+          const form = new FormData();
+          form.set("image", new File([blob], photo.name, { type: blob.type || "image/jpeg" }));
+          form.set("name", photo.name);
+          response = await fetch("/api/activity-classify", { method: "POST", body: form });
         }
-      }));
-    }
+        if (!response.ok) return;
+        const result = await response.json() as { activity?: Activity };
+        if (result.activity) classifiedActivities[photo.id] = result.activity;
+      } catch {
+        // Keep the filename-based suggestion when visual classification is unavailable.
+      }
+    }));
 
     setQualities(nextQualities);
     setQualityReasons(nextReasons);
