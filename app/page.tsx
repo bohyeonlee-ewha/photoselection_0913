@@ -251,6 +251,40 @@ export default function Home() {
     }
   };
 
+  const classifyActivities = async (targetPhotos: Photo[] = photos) => {
+    if (!targetPhotos.length) return;
+    setAnalysisMessage("사진 속 놀이 모습을 다시 분석하고 있어요…");
+    const classifiedActivities: Record<number, Activity> = Object.fromEntries(
+      targetPhotos.map((photo) => [photo.id, guessActivity(photo.name)]),
+    );
+    await Promise.all(targetPhotos.map(async (photo) => {
+      try {
+        let response: Response;
+        if (user && photo.persisted) {
+          response = await fetch(`/api/photos/${photo.id}/classify`, {
+            method: "POST",
+            body: JSON.stringify({ force: true }),
+            headers: { "Content-Type": "application/json" },
+          });
+        } else {
+          const imageResponse = await fetch(photo.url);
+          const blob = await imageResponse.blob();
+          const form = new FormData();
+          form.set("image", new File([blob], photo.name, { type: blob.type || "image/jpeg" }));
+          form.set("name", photo.name);
+          response = await fetch("/api/activity-classify", { method: "POST", body: form });
+        }
+        if (!response.ok) return;
+        const result = await response.json() as { activity?: Activity };
+        if (result.activity) classifiedActivities[photo.id] = result.activity;
+      } catch {
+        // Keep the filename-based suggestion when visual classification is unavailable.
+      }
+    }));
+    setActivityByPhoto((current) => ({ ...current, ...classifiedActivities }));
+    setAnalysisMessage("놀이 활동별 분류를 다시 완료했어요.");
+  };
+
   const analyzeAll = async () => {
     if (!photos.length) return;
     setStage("analyzing");
@@ -299,30 +333,7 @@ export default function Home() {
       setProgress(92 + Math.round(((index + 1) / analyses.length) * 7));
     });
 
-    const classifiedActivities: Record<number, Activity> = Object.fromEntries(
-      photos.map((photo) => [photo.id, guessActivity(photo.name)]),
-    );
-    setAnalysisMessage("활동 영역을 사진 내용으로 분류하고 있어요…");
-    await Promise.all(photos.map(async (photo) => {
-      try {
-        let response: Response;
-        if (user && photo.persisted) {
-          response = await fetch(`/api/photos/${photo.id}/classify`, { method: "POST", body: "{}" });
-        } else {
-          const imageResponse = await fetch(photo.url);
-          const blob = await imageResponse.blob();
-          const form = new FormData();
-          form.set("image", new File([blob], photo.name, { type: blob.type || "image/jpeg" }));
-          form.set("name", photo.name);
-          response = await fetch("/api/activity-classify", { method: "POST", body: form });
-        }
-        if (!response.ok) return;
-        const result = await response.json() as { activity?: Activity };
-        if (result.activity) classifiedActivities[photo.id] = result.activity;
-      } catch {
-        // Keep the filename-based suggestion when visual classification is unavailable.
-      }
-    }));
+    await classifyActivities(photos);
 
     setQualities(nextQualities);
     setQualityReasons(nextReasons);
@@ -330,7 +341,7 @@ export default function Home() {
     setShotTypes(nextShotTypes);
     setNames(nextNames);
     setMatchedChildren(nextMatches);
-    setActivityByPhoto((current) => ({ ...current, ...nextActivities, ...classifiedActivities }));
+    setActivityByPhoto((current) => ({ ...current, ...nextActivities }));
     setSelected(photos.filter((photo) => nextQualities[photo.id] === "good").map((photo) => photo.id));
     const recognizedPhotoCount = Object.values(nextMatches).filter((ids) => ids.length > 0).length;
     setRecognitionMessage(children.length
@@ -583,6 +594,7 @@ export default function Home() {
               shotTypes={shotTypes}
               activityByPhoto={activityByPhoto}
               setActivityByPhoto={setActivityByPhoto}
+              reclassify={() => void classifyActivities(photos)}
               selected={selected}
               toggleSelected={toggleSelected}
             />
@@ -931,6 +943,7 @@ function ActivityOrganization(props: {
   shotTypes: Record<number, ShotType>;
   activityByPhoto: Record<number, Activity>;
   setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
+  reclassify: () => void;
   selected: number[];
   toggleSelected: (id: number) => void;
 }) {
@@ -942,6 +955,7 @@ function ActivityOrganization(props: {
     <>
       <h1>아이 이름과 관계없이<br /><em>활동별로 모아봐요.</em></h1>
       <p className="page-lede">모든 개인사진을 아이 이름 대신 선택한 활동만 기준으로 분류해요. 활동을 바꾸면 사진이 해당 구역으로 바로 이동해요.</p>
+      <div className="page-actions"><button className="secondary" onClick={props.reclassify}>사진 속 놀이 모습으로 다시 분류</button></div>
       <div className="activity-organize-list">
         {groups.map((group) => (
           <section className="soft-card activity-organize-card" key={group.activity}>

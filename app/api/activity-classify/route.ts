@@ -19,17 +19,45 @@ function fallbackActivity(name: string) {
 }
 
 function parseActivity(content: string) {
-  const text = content.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  const text = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   try {
-    const value = JSON.parse(text) as { activity?: string; confidence?: number; reason?: string };
-    if (value.activity && activities.includes(value.activity as (typeof activities)[number])) {
-      return { activity: value.activity, confidence: Number(value.confidence) || 0.5, reason: value.reason || "AI 이미지 분석" };
+    const objectText = text.match(/\{[\s\S]*\}/)?.[0] ?? text;
+    const value = JSON.parse(objectText) as { activity?: string; confidence?: number; reason?: string };
+    const activity = normalizeActivity(value.activity);
+    if (activity) {
+      return { activity, confidence: clampConfidence(value.confidence), reason: value.reason || "AI 이미지 분석" };
     }
   } catch {
     // Use the category mentioned in a natural-language response.
   }
-  const activity = activities.find((item) => content.includes(item)) ?? "미분류";
+  const activity = findActivity(content) ?? "미분류";
   return { activity, confidence: activity === "미분류" ? 0.25 : 0.5, reason: content.slice(0, 1000) };
+}
+
+function normalizeActivity(value: unknown) {
+  if (typeof value !== "string") return null;
+  const compact = value.replace(/[\s_-]/g, "").toLowerCase();
+  const aliases: Record<string, (typeof activities)[number]> = {
+    "신체": "신체활동", "신체놀이": "신체활동", "체육": "신체활동",
+    "미술": "미술놀이", "미술활동": "미술놀이", "음악": "음률", "음악놀이": "음률",
+    "역할": "역할놀이", "언어": "언어영역", "수조작": "수·조작영역", "수학": "수·조작영역",
+    "감각탐구": "감각·탐구영역", "탐구": "감각·탐구영역", "바깥": "바깥놀이",
+  };
+  return activities.find((item) => item === value) ?? aliases[compact] ?? null;
+}
+
+function findActivity(content: string) {
+  const labels: Array<[string, (typeof activities)[number]]> = [
+    ["신체", "신체활동"], ["미술", "미술놀이"], ["음률", "음률"], ["음악", "음률"],
+    ["역할", "역할놀이"], ["언어", "언어영역"], ["수·조작", "수·조작영역"], ["수조작", "수·조작영역"],
+    ["감각·탐구", "감각·탐구영역"], ["감각탐구", "감각·탐구영역"], ["바깥", "바깥놀이"], ["기타", "기타"],
+  ];
+  return labels.find(([label]) => content.includes(label))?.[1] ?? null;
+}
+
+function clampConfidence(value: unknown) {
+  const confidence = Number(value);
+  return Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0.5;
 }
 
 export async function POST(request: Request) {
@@ -52,7 +80,7 @@ export async function POST(request: Request) {
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: `유아교육 활동 사진을 보고 아래 영역 중 하나로 분류하세요: ${activities.join(", ")}. 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극은 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록은 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육은 신체활동입니다. 반드시 JSON 한 줄로만 답하세요: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}` },
+          { type: "text", text: `유아교육 사진을 보고 사진 속 실제 놀이 모습에 따라 아래 영역 중 하나로 분류하세요: ${activities.join(", ")}. 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극·병원놀이·가게놀이는 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록·분류는 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육·신체 움직임은 신체활동, 야외에서 놀이하는 모습은 바깥놀이입니다. 사진에 놀이 활동이 보이지 않는 단순 인물 사진이나 일반 사진은 기타로 분류하세요. 미분류는 사진을 열 수 없거나 판단할 정보가 전혀 없을 때만 선택하세요. 반드시 JSON 한 줄로만 답하세요: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}` },
           { type: "image", source: { type: "base64", media_type: image.type, data: Buffer.from(await image.arrayBuffer()).toString("base64") } },
         ],
       }],

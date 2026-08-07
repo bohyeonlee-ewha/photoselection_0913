@@ -19,17 +19,17 @@ function parseClassification(content: string): Classification {
   const jsonText = content.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
   try {
     const parsed = JSON.parse(jsonText) as Partial<Classification>;
-    if (typeof parsed.activity === "string" && typeof parsed.reason === "string") {
+    if (typeof parsed.activity === "string") {
       return {
         activity: activities.includes(parsed.activity as Classification["activity"]) ? parsed.activity as Classification["activity"] : "미분류",
         confidence: Number(parsed.confidence) || 0.5,
-        reason: parsed.reason,
+        reason: parsed.reason || "AI 이미지 분석",
       };
     }
   } catch {
     // Some compatible models return a short natural-language answer despite the JSON instruction.
   }
-  const activity = activities.find((item) => content.includes(item)) ?? "미분류";
+  const activity = activities.find((item) => content.includes(item)) ?? "기타";
   return { activity, confidence: activity === "미분류" ? 0.25 : 0.5, reason: content.slice(0, 1000) };
 }
 
@@ -102,7 +102,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         content: [
           {
             type: "text",
-            text: `유아교육 활동 사진을 분석하고 아래 JSON 형식으로만 답하세요. 영역은 반드시 다음 중 하나여야 합니다: ${activities.join(", " )}.\n\n판단 기준: 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극·병원놀이·가게놀이는 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록·분류는 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육·신체 움직임은 신체활동입니다. 근거가 부족하면 미분류로 선택하세요. confidence는 0과 1 사이 숫자로 주세요.\n\n응답 형식: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}`,
+            text: `유아교육 사진을 분석하고 사진 속 실제 놀이 모습에 따라 아래 JSON 형식으로만 답하세요. 영역은 반드시 다음 중 하나여야 합니다: ${activities.join(", " )}.\n\n판단 기준: 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극·병원놀이·가게놀이는 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록·분류는 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육·신체 움직임은 신체활동, 야외 놀이는 바깥놀이입니다. 놀이가 보이지 않는 단순 인물 사진이나 일반 사진은 기타로 분류하세요. 미분류는 이미지를 열 수 없거나 판단할 정보가 전혀 없을 때만 선택하세요. confidence는 0과 1 사이 숫자로 주세요.\n\n응답 형식: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}`,
           },
           {
             type: "image",
