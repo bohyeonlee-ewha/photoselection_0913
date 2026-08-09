@@ -251,8 +251,8 @@ export default function Home() {
     }
   };
 
-  const classifyActivities = async (targetPhotos: Photo[] = photos) => {
-    if (!targetPhotos.length) return;
+  const classifyActivities = async (targetPhotos: Photo[] = photos): Promise<Record<number, Activity>> => {
+    if (!targetPhotos.length) return {};
     setAnalysisMessage("사진 속 놀이 모습을 다시 분석하고 있어요…");
     const classifiedActivities: Record<number, Activity> = Object.fromEntries(
       targetPhotos.map((photo) => [photo.id, guessActivity(photo.name)]),
@@ -283,6 +283,7 @@ export default function Home() {
     }));
     setActivityByPhoto((current) => ({ ...current, ...classifiedActivities }));
     setAnalysisMessage("놀이 활동별 분류를 다시 완료했어요.");
+    return classifiedActivities;
   };
 
   const analyzeAll = async () => {
@@ -314,14 +315,12 @@ export default function Home() {
     const nextReasons: Record<number, string[]> = {};
     const nextScores: Record<number, number> = {};
     const nextShotTypes: Record<number, ShotType> = {};
-    const nextActivities: Record<number, Activity> = {};
 
     analyses.forEach(({ photo, result }, index) => {
       nextQualities[photo.id] = result.quality;
       nextReasons[photo.id] = result.reasons;
       nextScores[photo.id] = result.score;
       nextShotTypes[photo.id] = result.shotType;
-      nextActivities[photo.id] = guessActivity(photo.name);
       const recognized = Array.from(new Set(result.descriptors
         .map((descriptor) => closestChild(descriptor, references))
         .filter((match): match is FaceMatch => Boolean(match))
@@ -333,7 +332,9 @@ export default function Home() {
       setProgress(92 + Math.round(((index + 1) / analyses.length) * 7));
     });
 
-    await classifyActivities(photos);
+    // The activity classifier analyzes the actual image. Do not replace its
+    // result with the filename-based initial suggestion below.
+    const classifiedActivities = await classifyActivities(photos);
 
     setQualities(nextQualities);
     setQualityReasons(nextReasons);
@@ -341,7 +342,7 @@ export default function Home() {
     setShotTypes(nextShotTypes);
     setNames(nextNames);
     setMatchedChildren(nextMatches);
-    setActivityByPhoto((current) => ({ ...current, ...nextActivities }));
+    setActivityByPhoto(classifiedActivities);
     setSelected(photos.filter((photo) => nextQualities[photo.id] === "good").map((photo) => photo.id));
     const recognizedPhotoCount = Object.values(nextMatches).filter((ids) => ids.length > 0).length;
     setRecognitionMessage(children.length
