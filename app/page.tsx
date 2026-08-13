@@ -485,8 +485,9 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="masthead">
-        <button className="brand brand-button" onClick={() => setStage(photos.length ? "workspace" : "landing")}>사진 고르기 <span>✦</span></button>
+        <button className="brand brand-button" onClick={() => setStage("landing")}>사진 고르기 <span>✦</span></button>
         <div className="account-actions">
+          {stage !== "landing" && <button className="account-link home-link" onClick={() => setStage("landing")}>홈</button>}
           {photos.length > 0 && <button className="home-button" onClick={reset}>새 작업</button>}
           {sessionLoaded && (user ? (
             <>
@@ -607,17 +608,18 @@ function SimplePhotoReview(props: {
   restorePhoto: (id: number) => void;
   saveChild: (childId: number) => Promise<void>;
 }) {
+  const [childFilter, setChildFilter] = useState("all");
   const [activityFilter, setActivityFilter] = useState<Activity | "all">("all");
   const individual = props.photos.filter((photo) => props.shotTypes[photo.id] !== "group");
   const [savingChild, setSavingChild] = useState<number | null>(null);
-  const visible = individual.filter((photo) => activityFilter === "all" || (props.activityByPhoto[photo.id] ?? "미분류") === activityFilter);
+  const visible = individual.filter((photo) => (childFilter === "all" || (childFilter === "unassigned" ? !props.names[photo.id] : String(props.names[photo.id] ?? "") === childFilter)) && (activityFilter === "all" || (props.activityByPhoto[photo.id] ?? "미분류") === activityFilter));
   const childSections = [...props.children.map((child) => ({ child, photos: visible.filter((photo) => props.names[photo.id] === child.id) })), { child: null, photos: visible.filter((photo) => !props.names[photo.id]) }];
   const saveChild = async (childId: number) => { setSavingChild(childId); try { await props.saveChild(childId); } finally { setSavingChild(null); } };
   return (
     <>
       <div className="simple-heading"><div><h1>아이별로 사진을 한눈에 정리해요.</h1><p className="page-lede">아이마다 놀이영역별로 사진을 모아 보여드려요. 사진 아래 드롭다운에서 분류를 바로 수정할 수 있어요.</p></div><span className="count-badge">{visible.length}장</span></div>
       <div className="summary-ribbon"><span><b>{individual.length}</b>장 개인사진</span><span className="good"><b>{individual.filter((photo) => props.selected.includes(photo.id)).length}</b>장 저장 선택</span><span className="bad"><b>{props.excluded.length}</b>장 자동 제외</span></div>
-      <div className="simple-filters"><select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div>
+      <div className="simple-filters"><select aria-label="아이 필터" value={childFilter} onChange={(event) => setChildFilter(event.target.value)}><option value="all">모든 아이</option><option value="unassigned">아이 미분류</option>{props.children.map((child) => <option value={child.id} key={child.id}>{child.name}</option>)}</select><select aria-label="놀이영역 필터" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div>
       <div className="child-scroll-list">{childSections.filter((section) => section.photos.length > 0 || section.child).map(({ child, photos: childPhotos }) => { const childId = child?.id ?? 0; const chosen = childPhotos.filter((photo) => props.selected.includes(photo.id)).length; const grouped = activities.map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) })).filter((group) => group.photos.length); return <section className="child-section-card" key={childId}><div className="child-section-heading">{child ? <div className="child-section-identity"><img src={child.url} alt={`${child.name} 대표 얼굴`} /><div><h2>{child.name}</h2><span>{childPhotos.length}장 · {chosen}장 저장 선택</span></div></div> : <div className="child-section-identity"><div className="unassigned-avatar">?</div><div><h2>아이 미분류</h2><span>{childPhotos.length}장</span></div></div>}{child && <button className="secondary child-save-button" disabled={!chosen || savingChild !== null} onClick={() => void saveChild(child.id)}>{savingChild === child.id ? "저장 중…" : "저장하기"}</button>}</div><div className="child-activity-row">{grouped.map((group) => <div className="child-activity-column" key={group.activity}><div className="child-activity-heading"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div><div className="child-photo-strip">{group.photos.map((photo) => { const picked = props.selected.includes(photo.id); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><img src={photo.url} alt={photo.name} /><span>{picked ? "✓ 저장" : "제외"}</span></button><div className="simple-photo-fields"><select aria-label={`${photo.name} 아이 선택`} value={props.names[photo.id] ?? ""} onChange={(event) => props.setNames((current) => ({ ...current, [photo.id]: Number(event.target.value) }))}><option value="">아이 미분류</option>{props.children.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select aria-label={`${photo.name} 놀이영역 선택`} value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div></div>)}</div></section>; })}</div>
       {props.excluded.length > 0 && <details className="excluded-panel"><summary>자동 제외된 사진 {props.excluded.length}장 확인</summary><p>흔들림, 초점, 중복 또는 사진 가장자리의 과도한 잘림을 기준으로 기본 결과에서 제외했어요. 상반신 사진은 제외하지 않습니다.</p><div className="excluded-grid">{props.excluded.map((photo) => <article key={photo.id}><img src={photo.url} alt={photo.name} /><button onClick={() => props.restorePhoto(photo.id)}>결과에 포함</button></article>)}</div></details>}
     </>
