@@ -563,7 +563,7 @@ export default function Home() {
         </section>
       )}
 
-      <footer><span>사진 고르기</span><span>좋은 사진을 아이와 놀이별로 한눈에</span></footer>
+      <footer><span>사진 고르기</span><span>아이별로, 놀이별로 사진 정리</span></footer>
     </main>
   );
 }
@@ -573,8 +573,8 @@ function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => v
     <section className="landing-page">
       <div className="landing-hero">
         <p className="eyebrow">보육 사진 정리 도구</p>
-        <h1>좋은 사진을<br /><em>아이와 놀이별로.</em></h1>
-        <p className="landing-lede">사진을 올리면 흔들리거나 겹치는 사진은 걸러내고, 아이별·활동별로 정리해 바로 저장할 수 있어요.</p>
+        <h1>아이별로, 놀이별로<br /><em>사진 정리 끝.</em></h1>
+        <p className="landing-lede">사진을 올리면 좋은 장면만 골라 아이와 놀이영역별로 정리하고, 필요한 사진을 바로 저장할 수 있어요.</p>
         <div className="landing-actions">
           <button className="primary" onClick={onTry}>로그인 없이 먼저 사용해 보기 <span>→</span></button>
           {!user && <a className="secondary landing-login" href="/signin-with-chatgpt?return_to=/">로그인하고 아이 정보 저장하기</a>}
@@ -583,10 +583,10 @@ function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => v
         <p className="landing-note">로그인 없이도 분석과 다운로드를 체험할 수 있어요. 로그인하면 아이와 사진을 다음에도 이어서 사용할 수 있습니다.</p>
       </div>
       <div className="landing-features">
-        <article><span>01</span><strong>아이 등록</strong><p>대표사진과 이름을 한 번만 등록하면 사진 속 아이를 자동으로 찾아요.</p></article>
-        <article><span>02</span><strong>사진 자동 정리</strong><p>개인사진과 단체사진을 나누고, 사진 아래에 놀이영역을 표시해요.</p></article>
-        <article><span>03</span><strong>좋은 사진만 선택</strong><p>흔들림·초점·중복·과도한 잘림이 있는 사진은 기본 결과에서 제외해요.</p></article>
-        <article><span>04</span><strong>필요한 기준으로 저장</strong><p>개인사진, 단체사진, 아이별 결과를 ZIP으로 각각 다운로드할 수 있어요.</p></article>
+        <article><span>01</span><strong>아이를 먼저 등록해요</strong><p>대표사진과 이름을 등록하면 사진 속 아이를 자동으로 찾아요.</p></article>
+        <article><span>02</span><strong>사진을 올리면 나눠줘요</strong><p>개인사진과 단체사진을 구분하고, 놀이영역까지 정리해요.</p></article>
+        <article><span>03</span><strong>좋은 사진만 골라요</strong><p>흔들림·흐림·중복 사진은 걸러내고, 상반신 사진은 그대로 남겨요.</p></article>
+        <article><span>04</span><strong>원하는 방식으로 저장해요</strong><p>아이별·놀이별·단체사진을 필요한 만큼 나눠 저장할 수 있어요.</p></article>
       </div>
       <div className="landing-flow"><span>아이 등록</span><b>→</b><span>사진 업로드</span><b>→</b><span>개인·단체 정리</span><b>→</b><span>저장</span></div>
     </section>
@@ -660,7 +660,7 @@ function UploadStage(props: {
     <section className="upload-page">
       <div className="intro">
         <p className="eyebrow">보육 사진 정리</p>
-        <h1>좋은 사진을<br /><em>아이와 놀이별로.</em></h1>
+        <h1>아이별로, 놀이별로<br /><em>사진 정리 끝.</em></h1>
         <p>아이 얼굴을 먼저 설정하면, 업로드한 사진에서 잘 나온 장면을 고르고 아이·활동별로 정리해요.</p>
       </div>
 
