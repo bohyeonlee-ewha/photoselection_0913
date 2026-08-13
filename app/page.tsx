@@ -571,16 +571,24 @@ export default function Home() {
 function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => void }) {
   return (
     <section className="landing-page">
+      <div className="landing-hero-grid">
       <div className="landing-hero">
         <p className="eyebrow">보육 사진 정리 도구</p>
-        <h1>아이별로, 놀이별로<br /><em>사진 정리 끝.</em></h1>
+        <h1>아이별로 모으고<br /><em>놀이별로 정리해요.</em></h1>
         <p className="landing-lede">사진을 올리면 좋은 장면만 골라 아이와 놀이영역별로 정리하고, 필요한 사진을 바로 저장할 수 있어요.</p>
+        <p className="landing-quit-message">선생님, 사진 정리는 맡겨두고 오늘은 칼퇴하세요.</p>
         <div className="landing-actions">
           <button className="primary" onClick={onTry}>로그인 없이 먼저 사용해 보기 <span>→</span></button>
           {!user && <a className="secondary landing-login" href="/signin-with-chatgpt?return_to=/">로그인하고 아이 정보 저장하기</a>}
           {user && <span className="landing-signed-in">{user.email ?? "로그인됨"}으로 로그인되어 있어요.</span>}
         </div>
         <p className="landing-note">로그인 없이도 분석과 다운로드를 체험할 수 있어요. 로그인하면 아이와 사진을 다음에도 이어서 사용할 수 있습니다.</p>
+      </div>
+      <div className="landing-preview" aria-label="아이별 사진 정리 미리보기">
+        <div className="preview-window-top"><span></span><span></span><span></span><b>개인사진</b></div>
+        <div className="preview-child"><div className="preview-child-title"><span className="preview-avatar">민</span><strong>민서</strong><small>18장 · 12장 저장 선택</small><em>저장하기</em></div><div className="preview-activity"><b>미술놀이</b><div><i></i><i></i><i></i></div></div><div className="preview-activity"><b>신체활동</b><div><i></i><i></i></div></div></div>
+        <div className="preview-child second"><div className="preview-child-title"><span className="preview-avatar blue">준</span><strong>준호</strong><small>15장 · 10장 저장 선택</small><em>저장하기</em></div><div className="preview-activity"><b>언어영역</b><div><i></i><i></i><i></i></div></div></div>
+      </div>
       </div>
       <div className="landing-features">
         <article><span>01</span><strong>아이를 먼저 등록해요</strong><p>대표사진과 이름을 등록하면 사진 속 아이를 자동으로 찾아요.</p></article>
@@ -660,7 +668,7 @@ function UploadStage(props: {
     <section className="upload-page">
       <div className="intro">
         <p className="eyebrow">보육 사진 정리</p>
-        <h1>아이별로, 놀이별로<br /><em>사진 정리 끝.</em></h1>
+        <h1>아이별로 모으고<br /><em>놀이별로 정리해요.</em></h1>
         <p>아이 얼굴을 먼저 설정하면, 업로드한 사진에서 잘 나온 장면을 고르고 아이·활동별로 정리해요.</p>
       </div>
 
