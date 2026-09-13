@@ -457,7 +457,7 @@ export default function Home() {
     setBestByGroup({});
     setSessionId(null);
     setProgress(18);
-    setAnalysisMessage("가상 사진 27장을 준비하고 있어요.");
+    setAnalysisMessage("가상 사진 30장을 준비하고 있어요.");
     setRecognitionMessage("데모 결과예요. 가상 아동 3명, 개인·단체사진, 3개 놀이영역과 추천 제외사진을 확인해 보세요.");
     setStage("analyzing");
     window.setTimeout(() => {
@@ -467,23 +467,42 @@ export default function Home() {
     }, 700);
   };
 
+  const clearDemoState = (nextStage: Stage) => {
+    setDemoMode(false);
+    setPhotos([]);
+    setChildren([]);
+    setChildName("");
+    setChildPhoto(null);
+    setQualities({});
+    setQualityReasons({});
+    setQualityScores({});
+    setShotTypes({});
+    setNames({});
+    setMatchedChildren({});
+    setActivityByPhoto({});
+    setSelected([]);
+    setBestByGroup({});
+    setDuplicateOf({});
+    setSessionId(null);
+    setProgress(0);
+    setAnalysisMessage("");
+    setRecognitionMessage("");
+    setView("individual");
+    setStage(nextStage);
+    setMessage("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
+  };
+
+  const beginFreshUpload = () => {
+    if (demoMode) {
+      clearDemoState("upload");
+      return;
+    }
+    setStage("upload");
+  };
+
   const reset = async () => {
     if (demoMode) {
-      setDemoMode(false);
-      setPhotos([]);
-      setChildren([]);
-      setQualities({});
-      setQualityReasons({});
-      setQualityScores({});
-      setShotTypes({});
-      setNames({});
-      setMatchedChildren({});
-      setActivityByPhoto({});
-      setSelected([]);
-      setBestByGroup({});
-      setDuplicateOf({});
-      setRecognitionMessage("");
-      setStage("landing");
+      clearDemoState("landing");
       return;
     }
     if (user && sessionId) {
@@ -610,9 +629,9 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="masthead">
-        <button className="brand brand-button" onClick={() => setStage("landing")}>사진 고르기 <span>✦</span></button>
+        <button className="brand brand-button" onClick={() => demoMode ? clearDemoState("landing") : setStage("landing")}>사진 고르기 <span>✦</span></button>
         <div className="account-actions">
-          {stage !== "landing" && <button className="account-link home-link" onClick={() => setStage("landing")}>홈</button>}
+          {stage !== "landing" && <button className="account-link home-link" onClick={() => demoMode ? clearDemoState("landing") : setStage("landing")}>홈</button>}
           {photos.length > 0 && !demoMode && <button className="home-button" onClick={reset}>새 작업</button>}
           {sessionLoaded && (user ? (
             <>
@@ -623,11 +642,11 @@ export default function Home() {
         </div>
       </header>
 
-      {stage === "landing" && <LandingPage user={user} onTry={() => setStage("upload")} onDemo={startDemo} />}
+      {stage === "landing" && <LandingPage user={user} onTry={beginFreshUpload} onDemo={startDemo} />}
 
       {stage !== "landing" && stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
-          <button aria-current={stage === "upload" ? "step" : undefined} className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 등록·사진 업로드</button>
+          <button aria-current={stage === "upload" ? "step" : undefined} className={stage === "upload" ? "active" : ""} onClick={beginFreshUpload}>1 아이 등록·사진 업로드</button>
           <button aria-current={stage === "workspace" && view === "individual" ? "step" : undefined} className={stage === "workspace" && view === "individual" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individual")}>2 개인사진</button>
           <button aria-current={stage === "workspace" && view === "group" ? "step" : undefined} className={stage === "workspace" && view === "group" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("group")}>3 단체사진</button>
           <button aria-current={stage === "workspace" && view === "export" ? "step" : undefined} className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
