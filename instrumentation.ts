@@ -7,7 +7,6 @@ export async function register() {
     const result = await testDatabaseConnection();
     console.info(`[database] connected to ${result.database} at ${new Date(result.server_time).toISOString()}`);
   } catch (error) {
-    console.error("[database] startup connection check failed", error);
-    throw error;
+    console.warn("[database] startup connection check skipped; database features may be unavailable", error);
   }
 }

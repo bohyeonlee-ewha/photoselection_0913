@@ -16,7 +16,7 @@ function databaseUrl() {
 
 function shouldUseSsl(connectionString: string) {
   if (process.env.DATABASE_SSL === "disable") return false;
-  const hostname = new URL(connectionString).hostname;
+  const hostname = new URL(connectionString.includes("://") ? connectionString : `postgres://${connectionString}`).hostname;
   return hostname !== "localhost" && hostname !== "127.0.0.1";
 }
 

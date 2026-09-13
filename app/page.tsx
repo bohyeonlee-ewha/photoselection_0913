@@ -502,10 +502,10 @@ export default function Home() {
 
       {stage !== "landing" && stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
-          <button className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 등록·사진 업로드</button>
-          <button className={stage === "workspace" && view === "individual" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individual")}>2 개인사진</button>
-          <button className={stage === "workspace" && view === "group" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("group")}>3 단체사진</button>
-          <button className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
+          <button aria-current={stage === "upload" ? "step" : undefined} className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 등록·사진 업로드</button>
+          <button aria-current={stage === "workspace" && view === "individual" ? "step" : undefined} className={stage === "workspace" && view === "individual" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individual")}>2 개인사진</button>
+          <button aria-current={stage === "workspace" && view === "group" ? "step" : undefined} className={stage === "workspace" && view === "group" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("group")}>3 단체사진</button>
+          <button aria-current={stage === "workspace" && view === "export" ? "step" : undefined} className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
         </nav>
       )}
 
@@ -531,7 +531,7 @@ export default function Home() {
         <section className="soft-card analysis-page">
           <p className="eyebrow">사진 자동 분석</p>
           <h1>좋은 장면과 분류를<br /><em>찾고 있어요.</em></h1>
-          <div className="analysis-box">
+          <div className="analysis-box" role="status" aria-live="polite" aria-busy={progress < 100}>
             <strong>{progress}% 확인했어요</strong>
             <div className="bar"><span style={{ width: `${progress}%` }} /></div>
             <p>{analysisMessage}</p>
