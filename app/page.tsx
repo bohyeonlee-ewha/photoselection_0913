@@ -7,7 +7,7 @@ type View = "individual" | "group" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "실외놀이" | "기타" | "미분류";
-type Photo = { id: number; name: string; url: string; persisted?: boolean; demoEffect?: "blurred" | "shaken" };
+type Photo = { id: number; name: string; url: string; persisted?: boolean };
 type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
 type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
@@ -21,7 +21,7 @@ type ImageAnalysis = {
 
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
-const demoAssetVersion = "20260914-3";
+const demoAssetVersion = "20260914-4";
 const demoChildren: Child[] = [
   { id: 101, name: "하늘", url: `/demo/haneul-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
   { id: 102, name: "도윤", url: `/demo/doyun-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
@@ -402,11 +402,12 @@ export default function Home() {
       return {
         id,
         name: `데모_${activity}_${String(cropIndex + 1).padStart(2, "0")}.png`,
-        url: `/demo/photos/${demoPhotoFolders[areaIndex]}-${String(cropIndex + 1).padStart(2, "0")}.png?v=${demoAssetVersion}`,
-        childId,
+        url: id === 9007
+          ? `/demo/photos/out-of-focus.png?v=${demoAssetVersion}`
+          : `/demo/photos/${demoPhotoFolders[areaIndex]}-${String(cropIndex + 1).padStart(2, "0")}.png?v=${demoAssetVersion}`,
+        childId: id === 9007 || id === 9025 ? 0 : childId,
         shotType: isGroup ? "group" as ShotType : "individual" as ShotType,
         activity,
-        demoEffect: id === 9007 ? "blurred" as const : id === 9017 ? "shaken" as const : undefined,
       };
     }));
     const musicPhotos = [
@@ -437,8 +438,8 @@ export default function Home() {
       nextScores[photo.id] = reasons ? 42 + (index % 3) * 4 : 89 + (index % 9);
       nextShotTypes[photo.id] = photo.shotType;
       nextActivities[photo.id] = photo.activity;
-      nextMatches[photo.id] = photo.shotType === "group" ? [101, 102, 103] : [photo.childId];
-      if (photo.shotType === "individual") nextNames[photo.id] = photo.childId;
+      nextMatches[photo.id] = photo.shotType === "group" ? [101, 102, 103] : photo.childId ? [photo.childId] : [];
+      if (photo.shotType === "individual" && photo.childId) nextNames[photo.id] = photo.childId;
       if (photo.id === 9027) nextDuplicates[photo.id] = 9024;
     });
     setDemoMode(true);
@@ -729,7 +730,7 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
 }
 
 function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
-  return <img className={photo.demoEffect ? `demo-photo ${photo.demoEffect}` : undefined} src={photo.url} alt={alt} />;
+  return <img src={photo.url} alt={alt} />;
 }
 
 function SimplePhotoReview(props: {
