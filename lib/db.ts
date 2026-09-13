@@ -11,12 +11,12 @@ const globalForDatabase = globalThis as typeof globalThis & {
 function databaseUrl() {
   const value = process.env.DATABASE_URL;
   if (!value) throw new Error("DATABASE_URL environment variable is not set");
-  return value;
+  return value.includes("://") ? value : `postgres://${value}`;
 }
 
 function shouldUseSsl(connectionString: string) {
   if (process.env.DATABASE_SSL === "disable") return false;
-  const hostname = new URL(connectionString.includes("://") ? connectionString : `postgres://${connectionString}`).hostname;
+  const hostname = new URL(connectionString).hostname;
   return hostname !== "localhost" && hostname !== "127.0.0.1";
 }
 

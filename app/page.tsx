@@ -109,8 +109,14 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
-  const goodPhotos = photos.filter((photo) => qualities[photo.id] !== "bad" && !duplicateOf[photo.id]);
-  const selectedGoodPhotos = goodPhotos.filter((photo) => selected.includes(photo.id));
+  const goodPhotos = useMemo(
+    () => photos.filter((photo) => qualities[photo.id] !== "bad" && !duplicateOf[photo.id]),
+    [photos, qualities, duplicateOf],
+  );
+  const selectedGoodPhotos = useMemo(
+    () => goodPhotos.filter((photo) => selected.includes(photo.id)),
+    [goodPhotos, selected],
+  );
   const groupedCandidates = useMemo(
     () => groupForBest(goodPhotos, shotTypes, names, activityByPhoto, children, qualityScores),
     [goodPhotos, shotTypes, names, activityByPhoto, children, qualityScores],
@@ -185,8 +191,8 @@ export default function Home() {
       event.target.value = "";
       return;
     }
-    if (files.some((file) => !["image/jpeg", "image/png"].includes(file.type))) {
-      setMessage("JPG 또는 PNG 사진만 선택할 수 있어요.");
+    if (files.some((file) => !["image/jpeg", "image/png"].includes(file.type) || file.size > 10 * 1024 * 1024)) {
+      setMessage("JPG 또는 PNG 사진만 올릴 수 있고, 사진 한 장은 10MB 이하여야 해요.");
       event.target.value = "";
       return;
     }
@@ -251,7 +257,7 @@ export default function Home() {
     const classifiedActivities: Record<number, Activity> = Object.fromEntries(
       targetPhotos.map((photo) => [photo.id, guessActivity(photo.name)]),
     );
-    await Promise.all(targetPhotos.map(async (photo) => {
+    await mapWithConcurrency(targetPhotos, 4, async (photo) => {
       try {
         let response: Response;
         if (user && photo.persisted) {
@@ -274,7 +280,7 @@ export default function Home() {
       } catch {
         // Keep the filename-based suggestion when visual classification is unavailable.
       }
-    }));
+    });
     setActivityByPhoto((current) => ({ ...current, ...classifiedActivities }));
     setAnalysisMessage("놀이 활동별 분류를 다시 완료했어요.");
     return classifiedActivities;
@@ -373,7 +379,15 @@ export default function Home() {
   };
 
   const reset = async () => {
-    if (user && sessionId) await fetch(`/api/photos?sessionId=${sessionId}`, { method: "DELETE" });
+    if (user && sessionId) {
+      try {
+        const response = await fetch(`/api/photos?sessionId=${sessionId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("저장된 사진을 삭제하지 못했어요.");
+      } catch {
+        setMessage("새 작업을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+    }
     photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     setPhotos([]);
     setQualities({});
@@ -457,8 +471,7 @@ export default function Home() {
     const archiveName = scope.type === "child"
       ? `${safeFilename(scopedChild?.name ?? "아이")}-개인사진.zip`
       : scope.type === "group" ? "단체사진.zip" : "사진-분류-결과.zip";
-    const rows: string[] = [];
-    const entries = await Promise.all(scopedPhotos.map(async (photo, index) => {
+    const archived = await Promise.all(scopedPhotos.map(async (photo, index) => {
       const type = shotTypes[photo.id] ?? "individual";
       const child = children.find((item) => item.id === names[photo.id]);
       const owner = type === "group" ? "단체" : child?.name ?? "아이 미분류";
@@ -469,15 +482,20 @@ export default function Home() {
         .map((id) => children.find((item) => item.id === id)?.name)
         .filter(Boolean)
         .join(", ");
-      rows.push(["선택", "잘 나온 사진", type === "group" ? "단체" : "개인", owner, recognized || "미인식", activity, isBest ? "베스트" : "", photo.name].join("\t"));
+      const row = ["선택", "잘 나온 사진", type === "group" ? "단체" : "개인", owner, recognized || "미인식", activity, isBest ? "베스트" : "", photo.name].join("\t");
       const response = await fetch(photo.url);
+      if (!response.ok) throw new Error(`${photo.name} 사진을 읽지 못했어요.`);
       const data = new Uint8Array(await response.arrayBuffer());
       const folder = type === "group" ? `단체/${activity}` : `개인/${owner}/${activity}`;
-      return { name: `${safePath(folder)}/${String(index + 1).padStart(3, "0")}_${safeFilename(photo.name)}`, data };
+      return {
+        row,
+        entry: { name: `${safePath(folder)}/${String(index + 1).padStart(3, "0")}_${safeFilename(photo.name)}`, data },
+      };
     }));
+    const entries = archived.map(({ entry }) => entry);
     entries.unshift({
       name: "사진-분류-결과.tsv",
-      data: new TextEncoder().encode(`\uFEFF${[header, ...rows].join("\n")}`),
+      data: new TextEncoder().encode(`\uFEFF${[header, ...archived.map(({ row }) => row)].join("\n")}`),
     });
     downloadBlob(createStoredZip(entries), archiveName);
   };
@@ -675,9 +693,9 @@ function UploadStage(props: {
       <section className="soft-card children-card setup-card">
         <Title num="1" title="아이 얼굴과 이름 설정" note="한 아이만 나온 선명한 정면 얼굴 사진을 업로드해 주세요" />
         <div className="child-form">
-          <input value={props.childName} onChange={(event) => props.setChildName(event.target.value)} placeholder="아이 이름" />
+          <input aria-label="아이 이름" value={props.childName} onChange={(event) => props.setChildName(event.target.value)} placeholder="아이 이름" />
           <label className="child-file">
-            <input type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
+            <input aria-label="대표 얼굴 사진" type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
             {props.childPhoto ? props.childPhoto.name : "선명한 정면 얼굴 사진 선택"}
           </label>
           <button disabled={props.isRegisteringChild} onClick={() => void props.addChild()}>
@@ -701,7 +719,7 @@ function UploadStage(props: {
       <section className="soft-card upload-card">
         <Title num="2" title="사진 업로드" note="JPG · PNG / 최대 100장" />
         <label className="drop-zone">
-          <input type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "replace")} />
+          <input aria-label="사진 업로드" type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "replace")} />
           <span className="upload-icon">↑</span>
           <strong>사진 업로드하기</strong>
           <small>{props.photos.length ? "새 사진 묶음으로 현재 목록을 교체해요." : "사진을 끌어 놓거나 선택해 주세요."}</small>
@@ -709,7 +727,7 @@ function UploadStage(props: {
         {props.photos.length > 0 && (
           <>
             <label className="append-upload">
-              <input type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "append")} />
+              <input aria-label="추가 사진 업로드" type="file" accept="image/jpeg,image/png" multiple onChange={(event) => props.pickPhotos(event, "append")} />
               <span>＋</span><strong>추가 사진 업로드하기</strong><small>기존 {props.photos.length}장은 유지돼요.</small>
             </label>
             <PhotoStrip photos={props.photos} />
@@ -718,7 +736,7 @@ function UploadStage(props: {
       </section>
 
       <div className="flow-footer">
-        <span>{props.duplicateCount ? `${props.message} 중복 사진 ${props.duplicateCount}장은 결과에서 자동 제외됩니다.` : props.message}</span>
+        <span role="status" aria-live="polite">{props.duplicateCount ? `${props.message} 중복 사진 ${props.duplicateCount}장은 결과에서 자동 제외됩니다.` : props.message}</span>
         <button className="primary" disabled={!props.photos.length} onClick={() => void props.analyzeAll()}>
           품질·분류 분석 시작 <span>→</span>
         </button>
@@ -1099,11 +1117,15 @@ function ExportResults(props: {
   const chosen = props.photos.filter((photo) => props.selected.includes(photo.id));
   const sections = groupForExport(chosen, props.shotTypes, props.names, props.activityByPhoto, props.children);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
   const groupCount = chosen.filter((photo) => props.shotTypes[photo.id] === "group").length;
   const savePhotos = async (scope: ExportScope, key: string) => {
     setSavingKey(key);
+    setSaveError("");
     try {
       await props.downloadPhotoArchive(scope);
+    } catch {
+      setSaveError("사진을 묶지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSavingKey(null);
     }
@@ -1120,6 +1142,7 @@ function ExportResults(props: {
         </div>
       </div>
       <p className="export-note">전체 ZIP 외에도 아이별 개인사진과 단체사진을 각각 별도 ZIP으로 저장할 수 있어요.</p>
+      {saveError && <p className="export-error" role="alert">{saveError}</p>}
       <section className="scope-export-panel">
         <div className="scope-export-heading"><strong>나누어 저장하기</strong><span>결과에 포함한 사진 기준</span></div>
         <div className="scope-export-grid">
@@ -1284,6 +1307,18 @@ function guessActivity(name: string): Activity {
   if (/수조작|수학|퍼즐|블록|조립|분류|수세기|보드게임/.test(lowered)) return "수·조작영역";
   if (/감각|탐구|과학|실험|관찰|자연|요리|모래|물놀이|촉감/.test(lowered)) return "감각·탐구영역";
   return "미분류";
+}
+
+async function mapWithConcurrency<T>(items: T[], limit: number, work: (item: T) => Promise<void>) {
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await work(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
 async function detectDuplicatePhotos(next: Photo[], existing: Photo[]) {

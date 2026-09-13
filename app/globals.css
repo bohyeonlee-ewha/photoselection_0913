@@ -45,3 +45,5 @@ button,a,input,select,summary{transition:color .18s ease,background-color .18s e
 @keyframes analysis-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 @media(max-width:760px){.workflow-nav{top:6px;overflow-x:auto;padding:5px}.workflow-nav button{flex:0 0 auto}.masthead{gap:10px}.account-actions{min-width:0}.brand{font-size:19px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.photo-card:hover,.simple-photo-card:hover,.classification-card:hover,.primary:hover:not(:disabled),.finish:hover:not(:disabled){transform:none}}
+
+.export-error{max-width:760px;margin:-12px 0 26px;padding:12px 14px;border:1px solid #efcfd2;border-radius:12px;background:#fff6f6;color:#a6535b;font-size:11px;font-weight:800}
