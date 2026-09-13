@@ -7,7 +7,7 @@ type View = "individual" | "group" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "실외놀이" | "기타" | "미분류";
-type Photo = { id: number; name: string; url: string; persisted?: boolean };
+type Photo = { id: number; name: string; url: string; persisted?: boolean; demoEffect?: "blurred" | "shaken" };
 type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
 type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
@@ -21,7 +21,7 @@ type ImageAnalysis = {
 
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
-const demoAssetVersion = "20260914-2";
+const demoAssetVersion = "20260914-3";
 const demoChildren: Child[] = [
   { id: 101, name: "하늘", url: `/demo/haneul-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
   { id: 102, name: "도윤", url: `/demo/doyun-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
@@ -394,7 +394,7 @@ export default function Home() {
   };
 
   const startDemo = () => {
-    const demoPhotos = demoAreas.flatMap((activity, areaIndex) => Array.from({ length: 9 }, (_, cropIndex) => {
+    const baseDemoPhotos = demoAreas.flatMap((activity, areaIndex) => Array.from({ length: 9 }, (_, cropIndex) => {
       const id = 9001 + areaIndex * 9 + cropIndex;
       const childId = demoPhotoChildIds[cropIndex];
       // Each 3×3 demo sheet uses panels 5 and 9 for the group scenes.
@@ -406,8 +406,15 @@ export default function Home() {
         childId,
         shotType: isGroup ? "group" as ShotType : "individual" as ShotType,
         activity,
+        demoEffect: id === 9007 ? "blurred" as const : id === 9017 ? "shaken" as const : undefined,
       };
     }));
+    const musicPhotos = [
+      { id: 9028, name: "데모_음률_하늘.png", url: `/demo/photos/music/01.png?v=${demoAssetVersion}`, childId: 101, shotType: "individual" as ShotType, activity: "음률" as Activity },
+      { id: 9029, name: "데모_음률_도윤.png", url: `/demo/photos/music/02.png?v=${demoAssetVersion}`, childId: 102, shotType: "individual" as ShotType, activity: "음률" as Activity },
+      { id: 9030, name: "데모_음률_지아.png", url: `/demo/photos/music/03.png?v=${demoAssetVersion}`, childId: 103, shotType: "individual" as ShotType, activity: "음률" as Activity },
+    ];
+    const demoPhotos = [...baseDemoPhotos, ...musicPhotos];
     const excluded = new Map<number, string[]>([
       [9007, ["초점이 흐려 추천에서 제외"]],
       [9017, ["화면 흔들림이 커 추천에서 제외"]],
@@ -722,7 +729,7 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
 }
 
 function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
-  return <img src={photo.url} alt={alt} />;
+  return <img className={photo.demoEffect ? `demo-photo ${photo.demoEffect}` : undefined} src={photo.url} alt={alt} />;
 }
 
 function SimplePhotoReview(props: {
