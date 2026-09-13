@@ -7,8 +7,8 @@ type View = "individual" | "group" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "실외놀이" | "기타" | "미분류";
-type Photo = { id: number; name: string; url: string; persisted?: boolean };
-type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
+type Photo = { id: number; name: string; url: string; persisted?: boolean; demoCrop?: string };
+type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean; demoCrop?: string };
 type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
 type ImageAnalysis = {
@@ -21,6 +21,13 @@ type ImageAnalysis = {
 
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
+const demoChildren: Child[] = [
+  { id: 101, name: "하늘", url: "/demo/art-play-grid.png", demoCrop: "0% 0%", descriptor: [], persisted: false },
+  { id: 102, name: "도윤", url: "/demo/block-play-grid.png", demoCrop: "50% 0%", descriptor: [], persisted: false },
+  { id: 103, name: "지아", url: "/demo/outdoor-play-grid.png", demoCrop: "100% 0%", descriptor: [], persisted: false },
+];
+const demoCrops = ["0% 0%", "50% 0%", "100% 0%", "0% 50%", "50% 50%", "100% 50%", "0% 100%", "50% 100%", "100% 100%"];
+const demoAreas: Activity[] = ["미술놀이", "수·조작영역", "실외놀이"];
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("landing");
@@ -46,6 +53,7 @@ export default function Home() {
   const [analysisMessage, setAnalysisMessage] = useState("사진을 준비하고 있어요.");
   const [recognitionMessage, setRecognitionMessage] = useState("");
   const [message, setMessage] = useState("아이 얼굴을 설정하고 오늘 찍은 사진을 올려 주세요.");
+  const [demoMode, setDemoMode] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const photoUrls = useRef<string[]>([]);
@@ -383,7 +391,91 @@ export default function Home() {
     setStage("workspace");
   };
 
+  const startDemo = () => {
+    const demoPhotos = demoAreas.flatMap((activity, areaIndex) => demoCrops.map((demoCrop, cropIndex) => {
+      const id = 9001 + areaIndex * demoCrops.length + cropIndex;
+      const childId = demoChildren[(areaIndex + cropIndex) % demoChildren.length].id;
+      const isGroup = cropIndex === 2 || cropIndex === 5 || cropIndex === 8;
+      return {
+        id,
+        name: `데모_${activity}_${String(cropIndex + 1).padStart(2, "0")}.png`,
+        url: areaIndex === 0 ? "/demo/art-play-grid.png" : areaIndex === 1 ? "/demo/block-play-grid.png" : "/demo/outdoor-play-grid.png",
+        demoCrop,
+        childId,
+        shotType: isGroup ? "group" as ShotType : "individual" as ShotType,
+        activity,
+      };
+    }));
+    const excluded = new Map<number, string[]>([
+      [9007, ["초점이 흐려 추천에서 제외"]],
+      [9017, ["화면 흔들림이 커 추천에서 제외"]],
+      [9025, ["옆모습이 크게 보여 추천에서 제외"]],
+      [9026, ["눈을 감은 장면으로 추천에서 제외"]],
+      [9027, ["비슷한 장면의 중복 후보"]],
+    ]);
+    const nextQualities: Record<number, Quality> = {};
+    const nextReasons: Record<number, string[]> = {};
+    const nextScores: Record<number, number> = {};
+    const nextShotTypes: Record<number, ShotType> = {};
+    const nextNames: Record<number, number> = {};
+    const nextMatches: Record<number, number[]> = {};
+    const nextActivities: Record<number, Activity> = {};
+    const nextDuplicates: Record<number, number> = {};
+    demoPhotos.forEach((photo, index) => {
+      const reasons = excluded.get(photo.id);
+      nextQualities[photo.id] = reasons ? "bad" : "good";
+      nextReasons[photo.id] = reasons ?? ["선명한 장면", photo.shotType === "group" ? "단체사진으로 분류" : "얼굴 특징과 일치"];
+      nextScores[photo.id] = reasons ? 42 + (index % 3) * 4 : 89 + (index % 9);
+      nextShotTypes[photo.id] = photo.shotType;
+      nextActivities[photo.id] = photo.activity;
+      nextMatches[photo.id] = photo.shotType === "group" ? [101, 102, 103] : [photo.childId];
+      if (photo.shotType === "individual") nextNames[photo.id] = photo.childId;
+      if (photo.id === 9027) nextDuplicates[photo.id] = 9024;
+    });
+    setDemoMode(true);
+    setChildren(demoChildren);
+    setPhotos(demoPhotos.map(({ childId: _childId, shotType: _shotType, activity: _activity, ...photo }) => photo));
+    setQualities(nextQualities);
+    setQualityReasons(nextReasons);
+    setQualityScores(nextScores);
+    setShotTypes(nextShotTypes);
+    setNames(nextNames);
+    setMatchedChildren(nextMatches);
+    setActivityByPhoto(nextActivities);
+    setSelected(demoPhotos.filter((photo) => !excluded.has(photo.id)).map((photo) => photo.id));
+    setDuplicateOf(nextDuplicates);
+    setBestByGroup({});
+    setSessionId(null);
+    setProgress(18);
+    setAnalysisMessage("가상 사진 27장을 준비하고 있어요.");
+    setRecognitionMessage("데모 결과예요. 가상 아동 3명, 개인·단체사진, 3개 놀이영역과 추천 제외사진을 확인해 보세요.");
+    setStage("analyzing");
+    window.setTimeout(() => {
+      setProgress(100);
+      setAnalysisMessage("품질과 분류 결과를 준비했어요.");
+      window.setTimeout(() => { setStage("workspace"); setView("individual"); }, 350);
+    }, 700);
+  };
+
   const reset = async () => {
+    if (demoMode) {
+      setDemoMode(false);
+      setPhotos([]);
+      setChildren([]);
+      setQualities({});
+      setQualityReasons({});
+      setQualityScores({});
+      setShotTypes({});
+      setNames({});
+      setMatchedChildren({});
+      setActivityByPhoto({});
+      setSelected([]);
+      setBestByGroup({});
+      setDuplicateOf({});
+      setRecognitionMessage("");
+      setStage("landing");
+      return;
+    }
     if (user && sessionId) {
       try {
         const response = await fetch(`/api/photos?sessionId=${sessionId}`, { method: "DELETE" });
@@ -511,7 +603,9 @@ export default function Home() {
         <button className="brand brand-button" onClick={() => setStage("landing")}>사진 고르기 <span>✦</span></button>
         <div className="account-actions">
           {stage !== "landing" && <button className="account-link home-link" onClick={() => setStage("landing")}>홈</button>}
-          {photos.length > 0 && <button className="home-button" onClick={reset}>새 작업</button>}
+          {demoMode && <button className="home-button" onClick={startDemo}>데모 초기화</button>}
+          {demoMode && <button className="account-link home-link" onClick={reset}>데모 처음으로</button>}
+          {photos.length > 0 && !demoMode && <button className="home-button" onClick={reset}>새 작업</button>}
           {sessionLoaded && (user ? (
             <>
               <span className="account-email">{user.email ?? "로그인됨"}</span>
@@ -521,7 +615,7 @@ export default function Home() {
         </div>
       </header>
 
-      {stage === "landing" && <LandingPage user={user} onTry={() => setStage("upload")} />}
+      {stage === "landing" && <LandingPage user={user} onTry={() => setStage("upload")} onDemo={startDemo} />}
 
       {stage !== "landing" && stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
@@ -565,7 +659,7 @@ export default function Home() {
 
       {stage === "workspace" && (
         <section className="workspace-page">
-          <p className="eyebrow">{view === "individual" ? "2 개인사진" : view === "group" ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
+          <p className="eyebrow">{demoMode ? "데모 사진 체험 · " : ""}{view === "individual" ? "2 개인사진" : view === "group" ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
           {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
           {view === "individual" && <SimplePhotoReview photos={goodPhotos} excluded={photos.filter((photo) => qualities[photo.id] === "bad" || Boolean(duplicateOf[photo.id]))} children={children} shotTypes={shotTypes} names={names} matchedChildren={matchedChildren} qualityReasons={qualityReasons} setNames={setNames} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} setQuality={setQuality} restorePhoto={(id) => { setDuplicateOf((current) => { const next = { ...current }; delete next[id]; return next; }); setQuality(id, "good"); }} saveChild={(childId) => downloadPhotoArchive({ type: "child", childId })} />}
           {view === "group" && <SimpleGroupReview photos={goodPhotos} children={children} shotTypes={shotTypes} matchedChildren={matchedChildren} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} />}
@@ -591,7 +685,7 @@ export default function Home() {
   );
 }
 
-function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => void }) {
+function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry: () => void; onDemo: () => void }) {
   return (
     <section className="landing-page">
       <div className="landing-hero-grid">
@@ -602,10 +696,11 @@ function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => v
         <p className="landing-quit-message">선생님, 사진 정리는 맡겨두고 오늘은 칼퇴하세요.</p>
         <div className="landing-actions">
           <button className="primary" onClick={onTry}>로그인 없이 먼저 사용해 보기 <span>→</span></button>
+          <button className="secondary demo-start" onClick={onDemo}>데모 사진으로 체험하기</button>
           {!user && <a className="secondary landing-login" href="/signin-with-chatgpt?return_to=/">로그인하고 아이 정보 저장하기</a>}
           {user && <span className="landing-signed-in">{user.email ?? "로그인됨"}으로 로그인되어 있어요.</span>}
         </div>
-        <p className="landing-note">로그인 없이도 분석과 다운로드를 체험할 수 있어요. 로그인하면 아이와 사진을 다음에도 이어서 사용할 수 있습니다.</p>
+        <p className="landing-note">데모는 가상의 아동 3명과 예시 사진 27장으로 구성되며, 실제 아이 사진이나 저장된 데이터는 사용하지 않아요.</p>
       </div>
       <div className="landing-preview" aria-label="아이별 사진 정리 미리보기">
         <div className="preview-window-top"><span></span><span></span><span></span><b>개인사진</b></div>
@@ -622,6 +717,13 @@ function LandingPage({ user, onTry }: { user: SessionUser | null; onTry: () => v
       <div className="landing-flow"><span>아이 등록</span><b>→</b><span>사진 업로드</span><b>→</b><span>개인·단체 정리</span><b>→</b><span>저장</span></div>
     </section>
   );
+}
+
+function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
+  if (photo.demoCrop) {
+    return <span role="img" aria-label={alt} className="demo-photo-image" style={{ backgroundImage: `url(${photo.url})`, backgroundPosition: photo.demoCrop }} />;
+  }
+  return <img src={photo.url} alt={alt} />;
 }
 
 function SimplePhotoReview(props: {
@@ -653,8 +755,8 @@ function SimplePhotoReview(props: {
       <div className="simple-heading"><div><h1>아이별로 사진을 한눈에 정리해요.</h1><p className="page-lede">아이마다 놀이영역별로 사진을 모아 보여드려요. 사진 아래 드롭다운에서 분류를 바로 수정할 수 있어요.</p></div><span className="count-badge">{visible.length}장</span></div>
       <div className="summary-ribbon"><span><b>{individual.length}</b>장 개인사진</span><span className="good"><b>{individual.filter((photo) => props.selected.includes(photo.id)).length}</b>장 저장 선택</span><span className="bad"><b>{props.excluded.length}</b>장 자동 제외</span></div>
       <div className="simple-filters"><select aria-label="아이 필터" value={childFilter} onChange={(event) => setChildFilter(event.target.value)}><option value="all">모든 아이</option><option value="unassigned">아이 미분류</option>{props.children.map((child) => <option value={child.id} key={child.id}>{child.name}</option>)}</select><select aria-label="놀이영역 필터" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div>
-      <div className="child-scroll-list">{childSections.filter((section) => section.photos.length > 0 || section.child).map(({ child, photos: childPhotos }) => { const childId = child?.id ?? 0; const chosen = childPhotos.filter((photo) => props.selected.includes(photo.id)).length; const grouped = activities.map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) })).filter((group) => group.photos.length); const recommendedExcluded = child ? props.excluded.filter((photo) => props.names[photo.id] === child.id || props.matchedChildren[photo.id]?.includes(child.id)) : props.excluded.filter((photo) => !props.names[photo.id] && !(props.matchedChildren[photo.id]?.length)); return <section className="child-section-card" key={childId}><div className="child-section-heading">{child ? <div className="child-section-identity"><img src={child.url} alt={`${child.name} 대표 얼굴`} /><div><h2>{child.name} {recommendedExcluded.length > 0 && <small className="excluded-count">추천 제외사진 {recommendedExcluded.length}장</small>}</h2><span>{childPhotos.length}장 · {chosen}장 저장 선택</span></div></div> : <div className="child-section-identity"><div className="unassigned-avatar">?</div><div><h2>아이 미분류</h2><span>{childPhotos.length}장</span></div></div>}{child && <button className="secondary child-save-button" disabled={!chosen || savingChild !== null} onClick={() => void saveChild(child.id)}>{savingChild === child.id ? "저장 중…" : "저장하기"}</button>}</div><div className="child-activity-row">{grouped.map((group) => <div className="child-activity-column" key={group.activity}><div className="child-activity-heading"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div><div className="child-photo-strip">{group.photos.map((photo) => { const picked = props.selected.includes(photo.id); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><img src={photo.url} alt={photo.name} /><span>{picked ? "✓ 저장" : "제외"}</span></button><div className="simple-photo-fields"><select aria-label={`${photo.name} 아이 선택`} value={props.names[photo.id] ?? ""} onChange={(event) => props.setNames((current) => ({ ...current, [photo.id]: Number(event.target.value) }))}><option value="">아이 미분류</option>{props.children.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select aria-label={`${photo.name} 놀이영역 선택`} value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div></div>)}</div>{recommendedExcluded.length > 0 && <RecommendedExcludedPhotos photos={recommendedExcluded} reasons={props.qualityReasons} restorePhoto={props.restorePhoto} />}</section>; })}</div>
-      {props.excluded.length > 0 && <details className="excluded-panel"><summary>자동 제외된 사진 {props.excluded.length}장 확인</summary><p>흔들림, 초점, 중복 또는 사진 가장자리의 과도한 잘림을 기준으로 기본 결과에서 제외했어요. 상반신 사진은 제외하지 않습니다.</p><div className="excluded-grid">{props.excluded.map((photo) => <article key={photo.id}><img src={photo.url} alt={photo.name} /><button onClick={() => props.restorePhoto(photo.id)}>결과에 포함</button></article>)}</div></details>}
+      <div className="child-scroll-list">{childSections.filter((section) => section.photos.length > 0 || section.child).map(({ child, photos: childPhotos }) => { const childId = child?.id ?? 0; const chosen = childPhotos.filter((photo) => props.selected.includes(photo.id)).length; const grouped = activities.map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) })).filter((group) => group.photos.length); const recommendedExcluded = child ? props.excluded.filter((photo) => props.names[photo.id] === child.id || props.matchedChildren[photo.id]?.includes(child.id)) : props.excluded.filter((photo) => !props.names[photo.id] && !(props.matchedChildren[photo.id]?.length)); return <section className="child-section-card" key={childId}><div className="child-section-heading">{child ? <div className="child-section-identity"><PhotoImage photo={child} alt={`${child.name} 대표 얼굴`} /><div><h2>{child.name} {recommendedExcluded.length > 0 && <small className="excluded-count">추천 제외사진 {recommendedExcluded.length}장</small>}</h2><span>{childPhotos.length}장 · {chosen}장 저장 선택</span></div></div> : <div className="child-section-identity"><div className="unassigned-avatar">?</div><div><h2>아이 미분류</h2><span>{childPhotos.length}장</span></div></div>}{child && <button className="secondary child-save-button" disabled={!chosen || savingChild !== null} onClick={() => void saveChild(child.id)}>{savingChild === child.id ? "저장 중…" : "저장하기"}</button>}</div><div className="child-activity-row">{grouped.map((group) => <div className="child-activity-column" key={group.activity}><div className="child-activity-heading"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div><div className="child-photo-strip">{group.photos.map((photo) => { const picked = props.selected.includes(photo.id); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><PhotoImage photo={photo} alt={photo.name} /><span>{picked ? "✓ 저장" : "제외"}</span></button><div className="simple-photo-fields"><select aria-label={`${photo.name} 아이 선택`} value={props.names[photo.id] ?? ""} onChange={(event) => props.setNames((current) => ({ ...current, [photo.id]: Number(event.target.value) }))}><option value="">아이 미분류</option>{props.children.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select aria-label={`${photo.name} 놀이영역 선택`} value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div></div>)}</div>{recommendedExcluded.length > 0 && <RecommendedExcludedPhotos photos={recommendedExcluded} reasons={props.qualityReasons} restorePhoto={props.restorePhoto} />}</section>; })}</div>
+      {props.excluded.length > 0 && <details className="excluded-panel"><summary>자동 제외된 사진 {props.excluded.length}장 확인</summary><p>흔들림, 초점, 중복 또는 사진 가장자리의 과도한 잘림을 기준으로 기본 결과에서 제외했어요. 상반신 사진은 제외하지 않습니다.</p><div className="excluded-grid">{props.excluded.map((photo) => <article key={photo.id}><PhotoImage photo={photo} alt={photo.name} /><button onClick={() => props.restorePhoto(photo.id)}>결과에 포함</button></article>)}</div></details>}
     </>
   );
 }
@@ -665,7 +767,7 @@ function RecommendedExcludedPhotos({ photos, reasons, restorePhoto }: { photos: 
       <summary>추천 제외사진 {photos.length}장 보기</summary>
       <p>흐림·흔들림, 뒷모습·측면, 눈감음처럼 기록용으로 덜 적합한 사진이에요. 필요하면 다시 결과에 포함할 수 있어요.</p>
       <div className="child-excluded-grid">
-        {photos.map((photo) => <article key={photo.id}><img src={photo.url} alt={photo.name} /><small>{(reasons[photo.id] ?? ["자동 제외"]).join(" · ")}</small><button onClick={() => restorePhoto(photo.id)}>결과에 포함</button></article>)}
+        {photos.map((photo) => <article key={photo.id}><PhotoImage photo={photo} alt={photo.name} /><small>{(reasons[photo.id] ?? ["자동 제외"]).join(" · ")}</small><button onClick={() => restorePhoto(photo.id)}>결과에 포함</button></article>)}
       </div>
     </details>
   );
@@ -683,7 +785,7 @@ function SimpleGroupReview(props: {
 }) {
   const [activityFilter, setActivityFilter] = useState<Activity | "all">("all");
   const groups = props.photos.filter((photo) => props.shotTypes[photo.id] === "group").filter((photo) => activityFilter === "all" || (props.activityByPhoto[photo.id] ?? "미분류") === activityFilter);
-  return <><div className="simple-heading"><div><h1>단체사진을 모아 저장해요.</h1><p className="page-lede">단체사진은 놀이영역만 확인하고, 필요한 사진을 선택하세요.</p></div><span className="count-badge">{groups.length}장</span></div><div className="simple-filters"><select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div><div className="simple-photo-grid">{groups.map((photo) => { const picked = props.selected.includes(photo.id); const recognized = (props.matchedChildren[photo.id] ?? []).map((id) => props.children.find((child) => child.id === id)?.name).filter(Boolean).join(", "); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><img src={photo.url} alt={photo.name} /><span>{picked ? "✓ 저장 선택" : "결과에서 제외"}</span></button><div className="simple-photo-fields"><strong>단체사진</strong>{recognized && <small>참여 아이: {recognized}</small>}<select value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div>{!groups.length && <div className="empty-state">단체사진이 아직 없어요.</div>}</>;
+  return <><div className="simple-heading"><div><h1>단체사진을 모아 저장해요.</h1><p className="page-lede">단체사진은 놀이영역만 확인하고, 필요한 사진을 선택하세요.</p></div><span className="count-badge">{groups.length}장</span></div><div className="simple-filters"><select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div><div className="simple-photo-grid">{groups.map((photo) => { const picked = props.selected.includes(photo.id); const recognized = (props.matchedChildren[photo.id] ?? []).map((id) => props.children.find((child) => child.id === id)?.name).filter(Boolean).join(", "); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><PhotoImage photo={photo} alt={photo.name} /><span>{picked ? "✓ 저장 선택" : "결과에서 제외"}</span></button><div className="simple-photo-fields"><strong>단체사진</strong>{recognized && <small>참여 아이: {recognized}</small>}<select value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div>{!groups.length && <div className="empty-state">단체사진이 아직 없어요.</div>}</>;
 }
 
 function UploadStage(props: {
@@ -1217,7 +1319,7 @@ function Title({ num, title, note }: { num: string; title: string; note: string 
 }
 
 function PhotoStrip({ photos }: { photos: Photo[] }) {
-  return <div className="upload-preview"><div className="preview-head"><strong>선택한 사진</strong><span>{photos.length}장</span></div><div className="thumbnail-row">{photos.slice(0, 10).map((photo) => <img key={photo.id} src={photo.url} alt={photo.name} />)}</div></div>;
+  return <div className="upload-preview"><div className="preview-head"><strong>선택한 사진</strong><span>{photos.length}장</span></div><div className="thumbnail-row">{photos.slice(0, 10).map((photo) => <PhotoImage key={photo.id} photo={photo} alt={photo.name} />)}</div></div>;
 }
 
 function ActivitySummary({ photos, activityByPhoto }: { photos: Photo[]; activityByPhoto: Record<number, Activity> }) {
