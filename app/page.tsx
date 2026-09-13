@@ -699,30 +699,28 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
     <section className="landing-page">
       <div className="landing-hero-grid">
       <div className="landing-hero">
-        <p className="eyebrow">보육 사진 정리 도구</p>
-        <h1>아이별로 모으고<br /><em>놀이별로 정리해요.</em></h1>
-        <p className="landing-lede">사진을 올리면 좋은 장면만 골라 아이와 놀이영역별로 정리하고, 필요한 사진을 바로 저장할 수 있어요.</p>
-        <p className="landing-quit-message">선생님, 사진 정리는 맡겨두고 오늘은 칼퇴하세요.</p>
+        <p className="eyebrow">사진 정리, 더 간단하게</p>
+        <h1>아이 사진을<br /><em>한 번에 정리해요.</em></h1>
+        <p className="landing-lede">사진을 올리면 아이별·놀이별로 분류하고, 잘 나온 사진만 남겨요.</p>
         <div className="landing-actions">
           <button className="primary" onClick={onTry}>사진 직접 올리기 <span>→</span></button>
           <button className="secondary demo-start" onClick={onDemo}>데모 사진으로 체험하기</button>
           {user && <span className="landing-signed-in">{user.email ?? "로그인됨"}으로 로그인되어 있어요.</span>}
         </div>
-        <p className="landing-note">데모는 가상의 아동 3명과 예시 사진 27장으로 구성되며, 실제 아이 사진이나 저장된 데이터는 사용하지 않아요.</p>
+        <p className="landing-note">로그인하면 등록한 아이와 사진 정리 결과를 다음에도 이어서 볼 수 있어요.</p>
       </div>
       <div className="landing-preview" aria-label="아이별 사진 정리 미리보기">
-        <div className="preview-window-top"><span></span><span></span><span></span><b>개인사진</b></div>
-        <div className="preview-child"><div className="preview-child-title"><span className="preview-avatar">민</span><strong>민서</strong><small>18장 · 12장 저장 선택</small><em>저장하기</em></div><div className="preview-activity"><b>미술놀이</b><div><i></i><i></i><i></i></div></div><div className="preview-activity"><b>신체활동</b><div><i></i><i></i></div></div></div>
-        <div className="preview-child second"><div className="preview-child-title"><span className="preview-avatar blue">준</span><strong>준호</strong><small>15장 · 10장 저장 선택</small><em>저장하기</em></div><div className="preview-activity"><b>언어영역</b><div><i></i><i></i><i></i></div></div></div>
+        <div className="preview-window-top"><span></span><span></span><span></span><b>사진 정리 결과</b></div>
+        <div className="preview-child"><div className="preview-child-title"><span className="preview-avatar">아</span><strong>아이별 사진</strong><small>이름별로 바로 모아보기</small><em>확인</em></div><div className="preview-activity"><b>미술놀이</b><div><i></i><i></i><i></i></div></div><div className="preview-activity"><b>음률</b><div><i></i></div></div></div>
+        <div className="preview-child second"><div className="preview-child-title"><span className="preview-avatar blue">놀</span><strong>놀이영역별 사진</strong><small>필요한 사진만 저장</small><em>확인</em></div><div className="preview-activity"><b>실외놀이</b><div><i></i><i></i><i></i></div></div></div>
       </div>
       </div>
       <div className="landing-features">
-        <article><span>01</span><strong>아이를 먼저 등록해요</strong><p>대표사진과 이름을 등록하면 사진 속 아이를 자동으로 찾아요.</p></article>
-        <article><span>02</span><strong>사진을 올리면 나눠줘요</strong><p>개인사진과 단체사진을 구분하고, 놀이영역까지 정리해요.</p></article>
-        <article><span>03</span><strong>좋은 사진만 골라요</strong><p>흔들림·흐림·중복 사진은 걸러내고, 상반신 사진은 그대로 남겨요.</p></article>
-        <article><span>04</span><strong>원하는 방식으로 저장해요</strong><p>아이별·놀이별·단체사진을 필요한 만큼 나눠 저장할 수 있어요.</p></article>
+        <article><span>01</span><strong>아이별로 모으기</strong><p>대표사진을 기준으로 아이 사진을 한곳에 모아요.</p></article>
+        <article><span>02</span><strong>놀이별로 나누기</strong><p>미술·음률·실외놀이 등 활동별로 정리해요.</p></article>
+        <article><span>03</span><strong>좋은 사진만 저장</strong><p>흐림·흔들림·중복 후보를 먼저 확인해요.</p></article>
       </div>
-      <div className="landing-flow"><span>아이 등록</span><b>→</b><span>사진 업로드</span><b>→</b><span>개인·단체 정리</span><b>→</b><span>저장</span></div>
+      <div className="landing-flow"><span>사진 업로드</span><b>→</b><span>자동 분류</span><b>→</b><span>필요한 사진 저장</span></div>
     </section>
   );
 }
