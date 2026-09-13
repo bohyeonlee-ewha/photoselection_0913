@@ -613,15 +613,13 @@ export default function Home() {
         <button className="brand brand-button" onClick={() => setStage("landing")}>사진 고르기 <span>✦</span></button>
         <div className="account-actions">
           {stage !== "landing" && <button className="account-link home-link" onClick={() => setStage("landing")}>홈</button>}
-          {demoMode && <button className="home-button" onClick={startDemo}>데모 초기화</button>}
-          {demoMode && <button className="account-link home-link" onClick={reset}>데모 처음으로</button>}
           {photos.length > 0 && !demoMode && <button className="home-button" onClick={reset}>새 작업</button>}
           {sessionLoaded && (user ? (
             <>
               <span className="account-email">{user.email ?? "로그인됨"}</span>
-              <a className="account-link" href="/signout-with-chatgpt?return_to=/">로그아웃</a>
+              <a className="account-link logout-link" href="/signout-with-chatgpt?return_to=/">로그아웃</a>
             </>
-          ) : <a className="account-link primary-account" href="/signin-with-chatgpt?return_to=/">로그인해 아이 저장</a>)}
+          ) : <a className="account-link primary-account" href="/signin-with-chatgpt?return_to=/">로그인</a>)}
         </div>
       </header>
 
@@ -671,6 +669,7 @@ export default function Home() {
         <section className="workspace-page">
           <p className="eyebrow">{demoMode ? "데모 사진 체험 · " : ""}{view === "individual" ? "2 개인사진" : view === "group" ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
           {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
+          {demoMode && <div className="demo-workspace-actions"><div><strong>데모 사진 체험 중</strong><span>가상 사진과 결과는 저장되지 않아요.</span></div><div><button className="secondary" onClick={startDemo}>데모 초기화</button><button className="demo-finish-button" onClick={reset}>데모 처음으로</button></div></div>}
           {view === "individual" && <SimplePhotoReview photos={goodPhotos} excluded={photos.filter((photo) => qualities[photo.id] === "bad" || Boolean(duplicateOf[photo.id]))} children={children} shotTypes={shotTypes} names={names} matchedChildren={matchedChildren} qualityReasons={qualityReasons} setNames={setNames} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} setQuality={setQuality} restorePhoto={(id) => { setDuplicateOf((current) => { const next = { ...current }; delete next[id]; return next; }); setQuality(id, "good"); }} saveChild={(childId) => downloadPhotoArchive({ type: "child", childId })} />}
           {view === "group" && <SimpleGroupReview photos={goodPhotos} children={children} shotTypes={shotTypes} matchedChildren={matchedChildren} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} />}
           {view === "export" && (
@@ -705,9 +704,8 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
         <p className="landing-lede">사진을 올리면 좋은 장면만 골라 아이와 놀이영역별로 정리하고, 필요한 사진을 바로 저장할 수 있어요.</p>
         <p className="landing-quit-message">선생님, 사진 정리는 맡겨두고 오늘은 칼퇴하세요.</p>
         <div className="landing-actions">
-          <button className="primary" onClick={onTry}>로그인 없이 먼저 사용해 보기 <span>→</span></button>
+          <button className="primary" onClick={onTry}>사진 직접 올리기 <span>→</span></button>
           <button className="secondary demo-start" onClick={onDemo}>데모 사진으로 체험하기</button>
-          {!user && <a className="secondary landing-login" href="/signin-with-chatgpt?return_to=/">로그인하고 아이 정보 저장하기</a>}
           {user && <span className="landing-signed-in">{user.email ?? "로그인됨"}으로 로그인되어 있어요.</span>}
         </div>
         <p className="landing-note">데모는 가상의 아동 3명과 예시 사진 27장으로 구성되며, 실제 아이 사진이나 저장된 데이터는 사용하지 않아요.</p>
