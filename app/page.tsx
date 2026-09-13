@@ -715,12 +715,7 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
         <div className="preview-child second"><div className="preview-child-title"><span className="preview-avatar blue">놀</span><strong>놀이영역별 사진</strong><small>필요한 사진만 저장</small><em>확인</em></div><div className="preview-activity"><b>실외놀이</b><div><i></i><i></i><i></i></div></div></div>
       </div>
       </div>
-      <div className="landing-features">
-        <article><span>01</span><strong>아이별로 모으기</strong><p>대표사진을 기준으로 아이 사진을 한곳에 모아요.</p></article>
-        <article><span>02</span><strong>놀이별로 나누기</strong><p>미술·음률·실외놀이 등 활동별로 정리해요.</p></article>
-        <article><span>03</span><strong>좋은 사진만 저장</strong><p>흐림·흔들림·중복 후보를 먼저 확인해요.</p></article>
-      </div>
-      <div className="landing-flow"><span>사진 업로드</span><b>→</b><span>자동 분류</span><b>→</b><span>필요한 사진 저장</span></div>
+      <div className="landing-flow"><span><b>1</b> 사진 업로드</span><i></i><span><b>2</b> 자동 분류</span><i></i><span><b>3</b> 필요한 사진 저장</span></div>
     </section>
   );
 }
