@@ -700,7 +700,7 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
       <div className="landing-hero-grid">
       <div className="landing-hero">
         <p className="eyebrow">사진 정리, 더 간단하게</p>
-        <h1>아이 사진을<br /><em>한 번에 정리해요.</em></h1>
+        <h1>놀이 사진을<br /><em>한 번에 정리해요.</em></h1>
         <p className="landing-lede">사진을 올리면 아이별·놀이별로 분류하고, 잘 나온 사진만 남겨요.</p>
         <div className="landing-actions">
           <button className="primary" onClick={onTry}>사진 직접 올리기 <span>→</span></button>
@@ -709,13 +709,13 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
         </div>
         <p className="landing-note">로그인하면 등록한 아이와 사진 정리 결과를 다음에도 이어서 볼 수 있어요.</p>
       </div>
+      <div className="landing-flow"><span><b>1</b> 사진 업로드</span><i></i><span><b>2</b> 자동 분류</span><i></i><span><b>3</b> 필요한 사진 저장</span></div>
       <div className="landing-preview" aria-label="아이별 사진 정리 미리보기">
         <div className="preview-window-top"><span></span><span></span><span></span><b>사진 정리 결과</b></div>
         <div className="preview-child"><div className="preview-child-title"><span className="preview-avatar">아</span><strong>아이별 사진</strong><small>이름별로 바로 모아보기</small><em>확인</em></div><div className="preview-activity"><b>미술놀이</b><div><i></i><i></i><i></i></div></div><div className="preview-activity"><b>음률</b><div><i></i></div></div></div>
         <div className="preview-child second"><div className="preview-child-title"><span className="preview-avatar blue">놀</span><strong>놀이영역별 사진</strong><small>필요한 사진만 저장</small><em>확인</em></div><div className="preview-activity"><b>실외놀이</b><div><i></i><i></i><i></i></div></div></div>
       </div>
       </div>
-      <div className="landing-flow"><span><b>1</b> 사진 업로드</span><i></i><span><b>2</b> 자동 분류</span><i></i><span><b>3</b> 필요한 사진 저장</span></div>
     </section>
   );
 }
