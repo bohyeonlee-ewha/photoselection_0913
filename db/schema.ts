@@ -69,4 +69,5 @@ export const schemaStatements = [
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_confidence DOUBLE PRECISION`,
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_reason TEXT`,
   `ALTER TABLE photos ADD COLUMN IF NOT EXISTS activity_source TEXT NOT NULL DEFAULT 'filename'`,
+  `UPDATE photos SET activity = '실외놀이' WHERE activity = '바깥놀이'`,
 ] as const;

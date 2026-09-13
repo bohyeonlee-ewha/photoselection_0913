@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 const activities = [
   "신체활동", "미술놀이", "음률", "역할놀이", "언어영역",
-  "수·조작영역", "감각·탐구영역", "바깥놀이", "기타", "미분류",
+  "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류",
 ] as const;
 
 type Classification = {
@@ -35,7 +35,8 @@ function parseClassification(content: string): Classification {
 
 function fallbackActivity(name: string) {
   const value = name.toLowerCase().replace(/[\s_-]/g, "");
-  if (/신체|체육|운동|달리기|바깥|산책|놀이터/.test(value)) return "신체활동";
+  if (/바깥|실외|산책|놀이터/.test(value)) return "실외놀이";
+  if (/신체|체육|운동|달리기/.test(value)) return "신체활동";
   if (/미술|그림|물감|만들기|공작|색칠|그리기|클레이/.test(value)) return "미술놀이";
   if (/음률|음악|노래|악기|리듬|동요|율동/.test(value)) return "음률";
   if (/역할|병원놀이|가게놀이|소꿉|인형놀이|극놀이/.test(value)) return "역할놀이";
@@ -102,7 +103,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         content: [
           {
             type: "text",
-            text: `유아교육 사진을 분석하고 사진 속 실제 놀이 모습에 따라 아래 JSON 형식으로만 답하세요. 영역은 반드시 다음 중 하나여야 합니다: ${activities.join(", " )}.\n\n판단 기준: 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극·병원놀이·가게놀이는 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록·분류는 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육·신체 움직임은 신체활동, 야외 놀이는 바깥놀이입니다. 놀이가 보이지 않는 단순 인물 사진이나 일반 사진은 기타로 분류하세요. 미분류는 이미지를 열 수 없거나 판단할 정보가 전혀 없을 때만 선택하세요. confidence는 0과 1 사이 숫자로 주세요.\n\n응답 형식: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}`,
+            text: `유아교육 사진을 분석하고 사진 속 실제 놀이 모습에 따라 아래 JSON 형식으로만 답하세요. 영역은 반드시 다음 중 하나여야 합니다: ${activities.join(", " )}.\n\n판단 기준: 미술 재료·그리기·만들기는 미술놀이, 악기·노래·리듬은 음률, 역할극·병원놀이·가게놀이는 역할놀이, 책·이야기·글자는 언어영역, 숫자·퍼즐·블록·분류는 수·조작영역, 자연·실험·감각 탐색은 감각·탐구영역, 달리기·체육·신체 움직임은 신체활동, 실외 놀이는 실외놀이입니다. 놀이가 보이지 않는 단순 인물 사진이나 일반 사진은 기타로 분류하세요. 미분류는 이미지를 열 수 없거나 판단할 정보가 전혀 없을 때만 선택하세요. confidence는 0과 1 사이 숫자로 주세요.\n\n응답 형식: {"activity":"미술놀이","confidence":0.9,"reason":"판단 근거"}`,
           },
           {
             type: "image",

@@ -6,7 +6,7 @@ type Stage = "landing" | "upload" | "analyzing" | "workspace";
 type View = "individual" | "group" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
-type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "바깥놀이" | "기타" | "미분류";
+type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "실외놀이" | "기타" | "미분류";
 type Photo = { id: number; name: string; url: string; persisted?: boolean };
 type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
 type SessionUser = { id: string; email: string | null };
@@ -19,7 +19,7 @@ type ImageAnalysis = {
   score: number;
 };
 
-const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "바깥놀이", "기타", "미분류"];
+const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
 
 export default function Home() {
@@ -124,7 +124,7 @@ export default function Home() {
 
   const addChild = async () => {
     if (!childName.trim() || !childPhoto) {
-      setMessage("아이 이름과 얼굴이 잘 보이는 대표 사진을 함께 넣어 주세요.");
+      setMessage("아이 이름과 얼굴이 잘 보이는 설정 사진을 함께 넣어 주세요.");
       return;
     }
     const url = URL.createObjectURL(childPhoto);
@@ -135,8 +135,13 @@ export default function Home() {
       if (faces.length !== 1) {
         URL.revokeObjectURL(url);
         setMessage(faces.length === 0
-          ? "얼굴을 찾지 못했어요. 얼굴이 크고 선명하게 보이는 사진을 선택해 주세요."
-          : "대표 사진에는 한 아이의 얼굴만 보여야 해요. 한 명만 나온 사진을 선택해 주세요.");
+          ? "얼굴을 찾지 못했어요. 얼굴이 크고 선명한 사진으로 바꿔 주세요."
+          : "설정 사진에는 한 아이의 얼굴만 보여야 해요. 한 명만 나온 사진으로 바꿔 주세요.");
+        return;
+      }
+      if (faces[0].score < 0.6 || faces[0].frontalness < 0.55) {
+        URL.revokeObjectURL(url);
+        setMessage("설정 사진의 얼굴이 작거나 옆을 보고 있어요. 정면에 가깝고 선명한 사진으로 바꿔 주세요.");
         return;
       }
       let child: Child = { id: Date.now(), name: childName.trim(), url, descriptor: faces[0].descriptor, persisted: false };
@@ -156,7 +161,7 @@ export default function Home() {
       setChildName("");
       setChildPhoto(null);
       setMessage(user
-        ? `${child.name} 아이의 이름과 대표사진을 계정에 저장했어요.`
+        ? `${child.name} 아이의 설정 사진을 계정에 저장했어요.`
         : `${child.name} 아이를 임시로 등록했어요. 로그인하면 다음에도 불러올 수 있어요.`);
     } catch (error) {
       URL.revokeObjectURL(url);
@@ -562,7 +567,7 @@ export default function Home() {
         <section className="workspace-page">
           <p className="eyebrow">{view === "individual" ? "2 개인사진" : view === "group" ? "3 단체사진" : "4 결과 저장"} · {viewLabels[view]}</p>
           {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
-          {view === "individual" && <SimplePhotoReview photos={goodPhotos} excluded={photos.filter((photo) => qualities[photo.id] === "bad" || Boolean(duplicateOf[photo.id]))} children={children} shotTypes={shotTypes} names={names} setNames={setNames} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} setQuality={setQuality} restorePhoto={(id) => { setDuplicateOf((current) => { const next = { ...current }; delete next[id]; return next; }); setQuality(id, "good"); }} saveChild={(childId) => downloadPhotoArchive({ type: "child", childId })} />}
+          {view === "individual" && <SimplePhotoReview photos={goodPhotos} excluded={photos.filter((photo) => qualities[photo.id] === "bad" || Boolean(duplicateOf[photo.id]))} children={children} shotTypes={shotTypes} names={names} matchedChildren={matchedChildren} qualityReasons={qualityReasons} setNames={setNames} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} setQuality={setQuality} restorePhoto={(id) => { setDuplicateOf((current) => { const next = { ...current }; delete next[id]; return next; }); setQuality(id, "good"); }} saveChild={(childId) => downloadPhotoArchive({ type: "child", childId })} />}
           {view === "group" && <SimpleGroupReview photos={goodPhotos} children={children} shotTypes={shotTypes} matchedChildren={matchedChildren} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} />}
           {view === "export" && (
             <ExportResults
@@ -625,6 +630,8 @@ function SimplePhotoReview(props: {
   children: Child[];
   shotTypes: Record<number, ShotType>;
   names: Record<number, number>;
+  matchedChildren: Record<number, number[]>;
+  qualityReasons: Record<number, string[]>;
   activityByPhoto: Record<number, Activity>;
   setNames: React.Dispatch<React.SetStateAction<Record<number, number>>>;
   setActivityByPhoto: React.Dispatch<React.SetStateAction<Record<number, Activity>>>;
@@ -646,9 +653,21 @@ function SimplePhotoReview(props: {
       <div className="simple-heading"><div><h1>아이별로 사진을 한눈에 정리해요.</h1><p className="page-lede">아이마다 놀이영역별로 사진을 모아 보여드려요. 사진 아래 드롭다운에서 분류를 바로 수정할 수 있어요.</p></div><span className="count-badge">{visible.length}장</span></div>
       <div className="summary-ribbon"><span><b>{individual.length}</b>장 개인사진</span><span className="good"><b>{individual.filter((photo) => props.selected.includes(photo.id)).length}</b>장 저장 선택</span><span className="bad"><b>{props.excluded.length}</b>장 자동 제외</span></div>
       <div className="simple-filters"><select aria-label="아이 필터" value={childFilter} onChange={(event) => setChildFilter(event.target.value)}><option value="all">모든 아이</option><option value="unassigned">아이 미분류</option>{props.children.map((child) => <option value={child.id} key={child.id}>{child.name}</option>)}</select><select aria-label="놀이영역 필터" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div>
-      <div className="child-scroll-list">{childSections.filter((section) => section.photos.length > 0 || section.child).map(({ child, photos: childPhotos }) => { const childId = child?.id ?? 0; const chosen = childPhotos.filter((photo) => props.selected.includes(photo.id)).length; const grouped = activities.map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) })).filter((group) => group.photos.length); return <section className="child-section-card" key={childId}><div className="child-section-heading">{child ? <div className="child-section-identity"><img src={child.url} alt={`${child.name} 대표 얼굴`} /><div><h2>{child.name}</h2><span>{childPhotos.length}장 · {chosen}장 저장 선택</span></div></div> : <div className="child-section-identity"><div className="unassigned-avatar">?</div><div><h2>아이 미분류</h2><span>{childPhotos.length}장</span></div></div>}{child && <button className="secondary child-save-button" disabled={!chosen || savingChild !== null} onClick={() => void saveChild(child.id)}>{savingChild === child.id ? "저장 중…" : "저장하기"}</button>}</div><div className="child-activity-row">{grouped.map((group) => <div className="child-activity-column" key={group.activity}><div className="child-activity-heading"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div><div className="child-photo-strip">{group.photos.map((photo) => { const picked = props.selected.includes(photo.id); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><img src={photo.url} alt={photo.name} /><span>{picked ? "✓ 저장" : "제외"}</span></button><div className="simple-photo-fields"><select aria-label={`${photo.name} 아이 선택`} value={props.names[photo.id] ?? ""} onChange={(event) => props.setNames((current) => ({ ...current, [photo.id]: Number(event.target.value) }))}><option value="">아이 미분류</option>{props.children.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select aria-label={`${photo.name} 놀이영역 선택`} value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div></div>)}</div></section>; })}</div>
+      <div className="child-scroll-list">{childSections.filter((section) => section.photos.length > 0 || section.child).map(({ child, photos: childPhotos }) => { const childId = child?.id ?? 0; const chosen = childPhotos.filter((photo) => props.selected.includes(photo.id)).length; const grouped = activities.map((activity) => ({ activity, photos: childPhotos.filter((photo) => (props.activityByPhoto[photo.id] ?? "미분류") === activity) })).filter((group) => group.photos.length); const recommendedExcluded = child ? props.excluded.filter((photo) => props.names[photo.id] === child.id || props.matchedChildren[photo.id]?.includes(child.id)) : props.excluded.filter((photo) => !props.names[photo.id] && !(props.matchedChildren[photo.id]?.length)); return <section className="child-section-card" key={childId}><div className="child-section-heading">{child ? <div className="child-section-identity"><img src={child.url} alt={`${child.name} 대표 얼굴`} /><div><h2>{child.name} {recommendedExcluded.length > 0 && <small className="excluded-count">추천 제외사진 {recommendedExcluded.length}장</small>}</h2><span>{childPhotos.length}장 · {chosen}장 저장 선택</span></div></div> : <div className="child-section-identity"><div className="unassigned-avatar">?</div><div><h2>아이 미분류</h2><span>{childPhotos.length}장</span></div></div>}{child && <button className="secondary child-save-button" disabled={!chosen || savingChild !== null} onClick={() => void saveChild(child.id)}>{savingChild === child.id ? "저장 중…" : "저장하기"}</button>}</div><div className="child-activity-row">{grouped.map((group) => <div className="child-activity-column" key={group.activity}><div className="child-activity-heading"><strong>{group.activity}</strong><span>{group.photos.length}장</span></div><div className="child-photo-strip">{group.photos.map((photo) => { const picked = props.selected.includes(photo.id); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><img src={photo.url} alt={photo.name} /><span>{picked ? "✓ 저장" : "제외"}</span></button><div className="simple-photo-fields"><select aria-label={`${photo.name} 아이 선택`} value={props.names[photo.id] ?? ""} onChange={(event) => props.setNames((current) => ({ ...current, [photo.id]: Number(event.target.value) }))}><option value="">아이 미분류</option>{props.children.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><select aria-label={`${photo.name} 놀이영역 선택`} value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div></div>)}</div>{recommendedExcluded.length > 0 && <RecommendedExcludedPhotos photos={recommendedExcluded} reasons={props.qualityReasons} restorePhoto={props.restorePhoto} />}</section>; })}</div>
       {props.excluded.length > 0 && <details className="excluded-panel"><summary>자동 제외된 사진 {props.excluded.length}장 확인</summary><p>흔들림, 초점, 중복 또는 사진 가장자리의 과도한 잘림을 기준으로 기본 결과에서 제외했어요. 상반신 사진은 제외하지 않습니다.</p><div className="excluded-grid">{props.excluded.map((photo) => <article key={photo.id}><img src={photo.url} alt={photo.name} /><button onClick={() => props.restorePhoto(photo.id)}>결과에 포함</button></article>)}</div></details>}
     </>
+  );
+}
+
+function RecommendedExcludedPhotos({ photos, reasons, restorePhoto }: { photos: Photo[]; reasons: Record<number, string[]>; restorePhoto: (id: number) => void }) {
+  return (
+    <details className="child-excluded-panel">
+      <summary>추천 제외사진 {photos.length}장 보기</summary>
+      <p>흐림·흔들림, 뒷모습·측면, 눈감음처럼 기록용으로 덜 적합한 사진이에요. 필요하면 다시 결과에 포함할 수 있어요.</p>
+      <div className="child-excluded-grid">
+        {photos.map((photo) => <article key={photo.id}><img src={photo.url} alt={photo.name} /><small>{(reasons[photo.id] ?? ["자동 제외"]).join(" · ")}</small><button onClick={() => restorePhoto(photo.id)}>결과에 포함</button></article>)}
+      </div>
+    </details>
   );
 }
 
@@ -691,12 +710,12 @@ function UploadStage(props: {
       </div>
 
       <section className="soft-card children-card setup-card">
-        <Title num="1" title="아이 얼굴과 이름 설정" note="한 아이만 나온 선명한 정면 얼굴 사진을 업로드해 주세요" />
+        <Title num="1" title="아이 얼굴과 이름 설정" note="한 아이만 나온 선명한 얼굴 사진을 올려 주세요" />
         <div className="child-form">
           <input aria-label="아이 이름" value={props.childName} onChange={(event) => props.setChildName(event.target.value)} placeholder="아이 이름" />
           <label className="child-file">
-            <input aria-label="대표 얼굴 사진" type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
-            {props.childPhoto ? props.childPhoto.name : "선명한 정면 얼굴 사진 선택"}
+            <input aria-label="설정 얼굴 사진" type="file" accept="image/jpeg,image/png" onChange={(event) => props.setChildPhoto(event.target.files?.[0] ?? null)} />
+            {props.childPhoto ? props.childPhoto.name : "선명한 얼굴 사진 선택"}
           </label>
           <button disabled={props.isRegisteringChild} onClick={() => void props.addChild()}>
             {props.isRegisteringChild ? "얼굴 확인 중…" : "아이 추가"}
@@ -713,7 +732,7 @@ function UploadStage(props: {
               </div>
             ))}
           </div>
-        ) : <p className="helper setup-helper">얼굴 전체가 밝고 선명하게 보이는 정면 사진을 올려 주세요. 모자·마스크·손으로 얼굴을 가린 사진이나 여러 명이 함께 나온 사진은 피하는 것이 좋아요.</p>}
+        ) : <p className="helper setup-helper">얼굴 전체가 밝고 선명하게 보이는 사진을 골라 주세요. 모자·마스크·손으로 얼굴을 가리거나 여러 명이 함께 나온 사진은 피하는 것이 좋아요.</p>}
       </section>
 
       <section className="soft-card upload-card">
@@ -1299,7 +1318,8 @@ function legacyGuessActivity(name: string): string {
 
 function guessActivity(name: string): Activity {
   const lowered = name.toLowerCase().replace(/[\s_-]/g, "");
-  if (/신체|체육|운동|달리기|바깥|산책|놀이터/.test(lowered)) return "신체활동";
+  if (/바깥|실외|산책|놀이터/.test(lowered)) return "실외놀이";
+  if (/신체|체육|운동|달리기/.test(lowered)) return "신체활동";
   if (/미술|그림|물감|만들기|공작|색칠|그리기|클레이/.test(lowered)) return "미술놀이";
   if (/음률|음악|노래|악기|리듬|동요|율동/.test(lowered)) return "음률";
   if (/역할|병원놀이|가게놀이|소꿉|인형놀이|극놀이/.test(lowered)) return "역할놀이";
@@ -1406,13 +1426,17 @@ async function analyzeImage(url: string): Promise<ImageAnalysis> {
   const sharpness = laplacian / ((size - 2) * (size - 2));
   const edgeDensity = edgeCount / ((size - 2) * (size - 2));
   const reasons: string[] = [];
-  if (sharpness < 0.075) reasons.push("흔들림 가능성");
+  if (!faces.length) reasons.push("얼굴을 찾지 못함 (뒷모습·얼굴 가림 가능성)");
+  if (sharpness < 0.065) reasons.push("초점이 흐리거나 흔들림");
   if (brightness < 0.2) reasons.push("사진이 어두움");
   if (brightness > 0.88) reasons.push("사진이 너무 밝음");
   if (edgeDensity > 0.34) reasons.push("배경이 복잡해 보임");
-  if (faces.some((face) => face.x < image.naturalWidth * 0.025 || face.y < image.naturalHeight * 0.025 || face.x + face.width > image.naturalWidth * 0.975)) reasons.push("얼굴이 가장자리에 가까움");
+  const individualFace = faceResults.length === 1 ? faceResults[0] : null;
+  if (individualFace && individualFace.frontalness < 0.55) reasons.push("옆을 바라보거나 측면 일부만 보임");
+  if (individualFace && individualFace.eyeOpenness < 0.18) reasons.push("눈을 감은 모습");
+  if (faces.some((face) => face.x < image.naturalWidth * 0.025 || face.y < image.naturalHeight * 0.025 || face.x + face.width > image.naturalWidth * 0.975)) reasons.push("얼굴 일부가 잘림");
   if (!reasons.length) reasons.push("선명도와 구도가 양호함");
-  const severe = sharpness < 0.045 || brightness < 0.12 || brightness > 0.95;
+  const severe = !faces.length || sharpness < 0.065 || brightness < 0.12 || brightness > 0.95 || Boolean(individualFace && (individualFace.frontalness < 0.55 || individualFace.eyeOpenness < 0.18));
   const quality: Quality = severe || reasons.filter((reason) => reason !== "선명도와 구도가 양호함").length >= 3 ? "bad" : "good";
   const score = Math.max(20, Math.min(98, Math.round(88 - Math.max(0, 0.09 - sharpness) * 360 - Math.abs(brightness - 0.54) * 28 - Math.max(0, edgeDensity - 0.3) * 55)));
   return {
@@ -1425,7 +1449,7 @@ async function analyzeImage(url: string): Promise<ImageAnalysis> {
 }
 
 type FaceBox = { x: number; y: number; width: number; height: number };
-type FaceDescription = { box: FaceBox; descriptor: number[]; score: number };
+type FaceDescription = { box: FaceBox; descriptor: number[]; score: number; eyeOpenness: number; frontalness: number };
 type FaceReference = { id: number; descriptor: number[] };
 type FaceMatch = { id: number; distance: number; confidence: number };
 type FaceApiModule = typeof import("@vladmandic/face-api");
@@ -1467,14 +1491,17 @@ async function describeFaces(source: string | HTMLImageElement): Promise<FaceDes
     },
     descriptor: Array.from(result.descriptor),
     score: result.detection.score,
+    eyeOpenness: Math.min(eyeAspectRatio(result.landmarks.getLeftEye()), eyeAspectRatio(result.landmarks.getRightEye())),
+    frontalness: faceFrontalness(result.landmarks.getLeftEye(), result.landmarks.getRightEye(), result.landmarks.getNose(), result.detection.box),
   }));
 }
 
 function closestChild(descriptor: number[], children: FaceReference[]): FaceMatch | null {
+  const normalizedDescriptor = normalizeDescriptor(descriptor);
   const candidates = children
     .map((child) => ({
       id: child.id,
-      distance: Math.sqrt(descriptor.reduce((sum, value, index) => sum + (value - child.descriptor[index]) ** 2, 0)),
+      distance: Math.sqrt(normalizedDescriptor.reduce((sum, value, index) => sum + (value - normalizeDescriptor(child.descriptor)[index]) ** 2, 0)),
     }))
     .sort((left, right) => left.distance - right.distance);
   const best = candidates[0];
@@ -1485,6 +1512,25 @@ function closestChild(descriptor: number[], children: FaceReference[]): FaceMatc
     ...best,
     confidence: Math.max(1, Math.min(99, Math.round((1 - best.distance / 0.72) * 100))),
   };
+}
+
+function eyeAspectRatio(points: Array<{ x: number; y: number }>) {
+  if (points.length < 6) return 1;
+  const distance = (left: { x: number; y: number }, right: { x: number; y: number }) => Math.hypot(left.x - right.x, left.y - right.y);
+  return (distance(points[1], points[5]) + distance(points[2], points[4])) / (2 * distance(points[0], points[3]));
+}
+
+function faceFrontalness(leftEye: Array<{ x: number; y: number }>, rightEye: Array<{ x: number; y: number }>, nose: Array<{ x: number; y: number }>, box: FaceBox) {
+  const center = (points: Array<{ x: number; y: number }>) => points.reduce((sum, point) => sum + point.x, 0) / points.length;
+  const width = (points: Array<{ x: number; y: number }>) => Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x));
+  const eyeBalance = Math.min(width(leftEye), width(rightEye)) / Math.max(width(leftEye), width(rightEye), 1);
+  const noseOffset = Math.abs(center(nose) - (box.x + box.width / 2)) / box.width;
+  return Math.max(0, Math.min(1, eyeBalance * (1 - noseOffset * 2.6)));
+}
+
+function normalizeDescriptor(descriptor: number[]) {
+  const magnitude = Math.sqrt(descriptor.reduce((sum, value) => sum + value ** 2, 0));
+  return magnitude ? descriptor.map((value) => value / magnitude) : descriptor;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement | null> {
