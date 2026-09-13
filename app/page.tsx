@@ -7,8 +7,8 @@ type View = "individual" | "group" | "export";
 type Quality = "good" | "bad";
 type ShotType = "individual" | "group";
 type Activity = "신체활동" | "미술놀이" | "음률" | "역할놀이" | "언어영역" | "수·조작영역" | "감각·탐구영역" | "실외놀이" | "기타" | "미분류";
-type Photo = { id: number; name: string; url: string; persisted?: boolean; demoCrop?: string };
-type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean; demoCrop?: string };
+type Photo = { id: number; name: string; url: string; persisted?: boolean };
+type Child = { id: number; name: string; url: string; descriptor: number[]; persisted: boolean };
 type SessionUser = { id: string; email: string | null };
 type ExportScope = { type: "all" } | { type: "child"; childId: number } | { type: "group" };
 type ImageAnalysis = {
@@ -22,12 +22,13 @@ type ImageAnalysis = {
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
 const demoChildren: Child[] = [
-  { id: 101, name: "하늘", url: "/demo/haneul-representative.png", descriptor: [], persisted: false },
-  { id: 102, name: "도윤", url: "/demo/doyun-representative.png", descriptor: [], persisted: false },
-  { id: 103, name: "지아", url: "/demo/jia-representative.png", descriptor: [], persisted: false },
+  { id: 101, name: "하늘", url: "/demo/haneul-reference.png", descriptor: [], persisted: false },
+  { id: 102, name: "도윤", url: "/demo/doyun-reference.png", descriptor: [], persisted: false },
+  { id: 103, name: "지아", url: "/demo/jia-reference.png", descriptor: [], persisted: false },
 ];
-const demoCrops = ["0% 0%", "50% 0%", "100% 0%", "0% 50%", "50% 50%", "100% 50%", "0% 100%", "50% 100%", "100% 100%"];
 const demoAreas: Activity[] = ["미술놀이", "수·조작영역", "실외놀이"];
+const demoPhotoFolders = ["art", "block", "outdoor"] as const;
+const demoPhotoChildIds = [101, 102, 103, 102, 0, 101, 103, 102, 0];
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("landing");
@@ -392,15 +393,14 @@ export default function Home() {
   };
 
   const startDemo = () => {
-    const demoPhotos = demoAreas.flatMap((activity, areaIndex) => demoCrops.map((demoCrop, cropIndex) => {
-      const id = 9001 + areaIndex * demoCrops.length + cropIndex;
-      const childId = demoChildren[(areaIndex + cropIndex) % demoChildren.length].id;
+    const demoPhotos = demoAreas.flatMap((activity, areaIndex) => Array.from({ length: 9 }, (_, cropIndex) => {
+      const id = 9001 + areaIndex * 9 + cropIndex;
+      const childId = demoPhotoChildIds[cropIndex];
       const isGroup = cropIndex === 2 || cropIndex === 5 || cropIndex === 8;
       return {
         id,
         name: `데모_${activity}_${String(cropIndex + 1).padStart(2, "0")}.png`,
-        url: areaIndex === 0 ? "/demo/art-play-grid.png" : areaIndex === 1 ? "/demo/block-play-grid.png" : "/demo/outdoor-play-grid.png",
-        demoCrop,
+        url: `/demo/photos/${demoPhotoFolders[areaIndex]}-${String(cropIndex + 1).padStart(2, "0")}.png`,
         childId,
         shotType: isGroup ? "group" as ShotType : "individual" as ShotType,
         activity,
@@ -720,9 +720,6 @@ function LandingPage({ user, onTry, onDemo }: { user: SessionUser | null; onTry:
 }
 
 function PhotoImage({ photo, alt }: { photo: Photo; alt: string }) {
-  if (photo.demoCrop) {
-    return <span role="img" aria-label={alt} className="demo-photo-image" style={{ backgroundImage: `url(${photo.url})`, backgroundPosition: photo.demoCrop }} />;
-  }
   return <img src={photo.url} alt={alt} />;
 }
 
