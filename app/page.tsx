@@ -22,9 +22,9 @@ type ImageAnalysis = {
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
 const demoChildren: Child[] = [
-  { id: 101, name: "하늘", url: "/demo/art-play-grid.png", demoCrop: "0% 0%", descriptor: [], persisted: false },
-  { id: 102, name: "도윤", url: "/demo/block-play-grid.png", demoCrop: "50% 0%", descriptor: [], persisted: false },
-  { id: 103, name: "지아", url: "/demo/outdoor-play-grid.png", demoCrop: "100% 0%", descriptor: [], persisted: false },
+  { id: 101, name: "하늘", url: "/demo/haneul-representative.png", descriptor: [], persisted: false },
+  { id: 102, name: "도윤", url: "/demo/doyun-representative.png", descriptor: [], persisted: false },
+  { id: 103, name: "지아", url: "/demo/jia-representative.png", descriptor: [], persisted: false },
 ];
 const demoCrops = ["0% 0%", "50% 0%", "100% 0%", "0% 50%", "50% 50%", "100% 50%", "0% 100%", "50% 100%", "100% 100%"];
 const demoAreas: Activity[] = ["미술놀이", "수·조작영역", "실외놀이"];
