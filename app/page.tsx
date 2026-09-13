@@ -396,7 +396,8 @@ export default function Home() {
     const demoPhotos = demoAreas.flatMap((activity, areaIndex) => Array.from({ length: 9 }, (_, cropIndex) => {
       const id = 9001 + areaIndex * 9 + cropIndex;
       const childId = demoPhotoChildIds[cropIndex];
-      const isGroup = cropIndex === 2 || cropIndex === 5 || cropIndex === 8;
+      // Each 3×3 demo sheet uses panels 5 and 9 for the group scenes.
+      const isGroup = cropIndex === 4 || cropIndex === 8;
       return {
         id,
         name: `데모_${activity}_${String(cropIndex + 1).padStart(2, "0")}.png`,
