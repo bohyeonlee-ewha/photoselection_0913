@@ -21,10 +21,11 @@ type ImageAnalysis = {
 
 const activities: Activity[] = ["신체활동", "미술놀이", "음률", "역할놀이", "언어영역", "수·조작영역", "감각·탐구영역", "실외놀이", "기타", "미분류"];
 const viewLabels: Record<View, string> = { individual: "개인사진 정리", group: "단체사진 정리", export: "결과 저장" };
+const demoAssetVersion = "20260914-2";
 const demoChildren: Child[] = [
-  { id: 101, name: "하늘", url: "/demo/haneul-reference.png", descriptor: [], persisted: false },
-  { id: 102, name: "도윤", url: "/demo/doyun-reference.png", descriptor: [], persisted: false },
-  { id: 103, name: "지아", url: "/demo/jia-reference.png", descriptor: [], persisted: false },
+  { id: 101, name: "하늘", url: `/demo/haneul-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
+  { id: 102, name: "도윤", url: `/demo/doyun-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
+  { id: 103, name: "지아", url: `/demo/jia-reference.png?v=${demoAssetVersion}`, descriptor: [], persisted: false },
 ];
 const demoAreas: Activity[] = ["미술놀이", "수·조작영역", "실외놀이"];
 const demoPhotoFolders = ["art", "block", "outdoor"] as const;
@@ -401,7 +402,7 @@ export default function Home() {
       return {
         id,
         name: `데모_${activity}_${String(cropIndex + 1).padStart(2, "0")}.png`,
-        url: `/demo/photos/${demoPhotoFolders[areaIndex]}-${String(cropIndex + 1).padStart(2, "0")}.png`,
+        url: `/demo/photos/${demoPhotoFolders[areaIndex]}-${String(cropIndex + 1).padStart(2, "0")}.png?v=${demoAssetVersion}`,
         childId,
         shotType: isGroup ? "group" as ShotType : "individual" as ShotType,
         activity,
