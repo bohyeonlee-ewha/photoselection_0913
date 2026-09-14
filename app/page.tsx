@@ -646,7 +646,7 @@ export default function Home() {
 
       {stage !== "landing" && stage !== "analyzing" && (
         <nav className="app-nav workflow-nav" aria-label="사진 정리 단계">
-          <button aria-current={stage === "upload" ? "step" : undefined} className={stage === "upload" ? "active" : ""} onClick={beginFreshUpload}>1 아이 등록·사진 업로드</button>
+          <button aria-current={stage === "upload" ? "step" : undefined} className={stage === "upload" ? "active" : ""} onClick={() => setStage("upload")}>1 아이 등록·사진 업로드</button>
           <button aria-current={stage === "workspace" && view === "individual" ? "step" : undefined} className={stage === "workspace" && view === "individual" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("individual")}>2 개인사진</button>
           <button aria-current={stage === "workspace" && view === "group" ? "step" : undefined} className={stage === "workspace" && view === "group" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("group")}>3 단체사진</button>
           <button aria-current={stage === "workspace" && view === "export" ? "step" : undefined} className={stage === "workspace" && view === "export" ? "active" : ""} disabled={!photos.length} onClick={() => openWorkspaceView("export")}>4 결과 저장</button>
@@ -690,7 +690,7 @@ export default function Home() {
           {recognitionMessage && <div className="recognition-summary"><span>얼굴 인식</span>{recognitionMessage}</div>}
           {demoMode && <div className="demo-workspace-actions"><div><strong>데모 사진 체험 중</strong><span>가상 사진과 결과는 저장되지 않아요.</span></div><div><button className="secondary" onClick={startDemo}>데모 초기화</button><button className="demo-finish-button" onClick={reset}>데모 처음으로</button></div></div>}
           {view === "individual" && <SimplePhotoReview photos={goodPhotos} excluded={photos.filter((photo) => qualities[photo.id] === "bad" || Boolean(duplicateOf[photo.id]))} children={children} shotTypes={shotTypes} names={names} matchedChildren={matchedChildren} qualityReasons={qualityReasons} setNames={setNames} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} setQuality={setQuality} restorePhoto={(id) => { setDuplicateOf((current) => { const next = { ...current }; delete next[id]; return next; }); setQuality(id, "good"); }} saveChild={(childId) => downloadPhotoArchive({ type: "child", childId })} />}
-          {view === "group" && <SimpleGroupReview photos={goodPhotos} children={children} shotTypes={shotTypes} matchedChildren={matchedChildren} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} />}
+          {view === "group" && <SimpleGroupReview photos={goodPhotos} duplicateOf={duplicateOf} children={children} shotTypes={shotTypes} matchedChildren={matchedChildren} activityByPhoto={activityByPhoto} setActivityByPhoto={setActivityByPhoto} selected={selected} toggleSelected={toggleSelected} />}
           {view === "export" && (
             <ExportResults
               photos={goodPhotos}
@@ -792,6 +792,7 @@ function RecommendedExcludedPhotos({ photos, reasons, restorePhoto }: { photos: 
 
 function SimpleGroupReview(props: {
   photos: Photo[];
+  duplicateOf: Record<number, number>;
   children: Child[];
   shotTypes: Record<number, ShotType>;
   matchedChildren: Record<number, number[]>;
@@ -801,7 +802,9 @@ function SimpleGroupReview(props: {
   toggleSelected: (id: number) => void;
 }) {
   const [activityFilter, setActivityFilter] = useState<Activity | "all">("all");
-  const groups = props.photos.filter((photo) => props.shotTypes[photo.id] === "group").filter((photo) => activityFilter === "all" || (props.activityByPhoto[photo.id] ?? "미분류") === activityFilter);
+  const groups = props.photos
+    .filter((photo) => props.shotTypes[photo.id] === "group" && !props.duplicateOf[photo.id])
+    .filter((photo) => activityFilter === "all" || (props.activityByPhoto[photo.id] ?? "미분류") === activityFilter);
   return <><div className="simple-heading"><div><h1>단체사진을 모아 저장해요.</h1><p className="page-lede">단체사진은 놀이영역만 확인하고, 필요한 사진을 선택하세요.</p></div><span className="count-badge">{groups.length}장</span></div><div className="simple-filters"><select value={activityFilter} onChange={(event) => setActivityFilter(event.target.value as Activity | "all")}><option value="all">모든 놀이영역</option>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div><div className="simple-photo-grid">{groups.map((photo) => { const picked = props.selected.includes(photo.id); const recognized = (props.matchedChildren[photo.id] ?? []).map((id) => props.children.find((child) => child.id === id)?.name).filter(Boolean).join(", "); return <article className={`simple-photo-card ${picked ? "picked" : ""}`} key={photo.id}><button className="simple-photo-button" onClick={() => props.toggleSelected(photo.id)}><PhotoImage photo={photo} alt={photo.name} /><span>{picked ? "✓ 저장 선택" : "결과에서 제외"}</span></button><div className="simple-photo-fields"><strong>단체사진</strong>{recognized && <small>참여 아이: {recognized}</small>}<select value={props.activityByPhoto[photo.id] ?? "미분류"} onChange={(event) => props.setActivityByPhoto((current) => ({ ...current, [photo.id]: event.target.value as Activity }))}>{activities.map((activity) => <option value={activity} key={activity}>{activity}</option>)}</select></div></article>; })}</div>{!groups.length && <div className="empty-state">단체사진이 아직 없어요.</div>}</>;
 }
 
